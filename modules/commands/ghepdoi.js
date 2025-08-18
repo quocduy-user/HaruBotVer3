@@ -11,7 +11,7 @@ module.exports.config = {
   description: "Ghép đôi, cầu hôn và quản lý thông tin cặp đôi",
   commandCategory: "Tình yêu",
   usages: "[info/lyhon]",
-  cooldowns: 5,
+  cooldowns: 60,
 };
 
 let userMarriages = {};

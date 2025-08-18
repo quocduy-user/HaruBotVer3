@@ -18,7 +18,13 @@
     "DASHBOARD": false,
     "commandDisabled": [
         "my.js",
-        "my.js"
+        "my.js",
+        "vy.js",
+        "vy.js",
+        "ghepdoi.js",
+        "ghepdoi.js",
+        "avtdoi.js",
+        "avtdoi.js"
     ],
     "eventDisabled": [],
     "BOTNAME": "Haru",
