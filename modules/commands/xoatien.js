@@ -21,5 +21,5 @@ module.exports.run = async ({ api, event, Currencies }) => {
             }
         }
     }
-    return api.sendMessage("Số money của thành viên nhóm đã được reset về mức 0 !", event.threadID);
+    return api.sendMessage("Số money của thành viên nhóm đã được reset về mức 0", event.threadID);
 }

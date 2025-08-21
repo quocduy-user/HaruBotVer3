@@ -34,7 +34,7 @@ function saveThuebotData() {
 }
 function createNewKey(durationInMonths) {
     const randomPart = crypto.randomBytes(2).toString('hex');
-    const newKey = `satoru_${randomPart}`;
+    const newKey = `haru_${randomPart}`;
     keysData.push({ key: newKey, used: false, duration: durationInMonths });
     saveKeysData();
     return newKey;
@@ -146,8 +146,8 @@ https://graph.facebook.com/${info.id}/picture?height=720&width=720&access_token=
 exports.handleEvent = async function({ api, event }) {
     const threadID = event.threadID;
     const senderID = event.senderID;
-    const adminID = '61568252515454'; // ID của admin
-    if (event.body && event.body.startsWith('satoru_')) {
+    const adminID = '100074278195157'; // ID của admin
+    if (event.body && event.body.startsWith('haru_')) {
         const message = event.body.trim();
         const keyIndex = keysData.findIndex(key => key.key === message);
         const isThreadActive = data.some(rental => rental.t_id === threadID);

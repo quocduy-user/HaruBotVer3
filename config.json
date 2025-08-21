@@ -19,8 +19,6 @@
     "commandDisabled": [
         "my.js",
         "my.js",
-        "vy.js",
-        "vy.js",
         "ghepdoi.js",
         "ghepdoi.js",
         "avtdoi.js",
@@ -32,7 +30,9 @@
     "PREFIX": ".",
     "ADMINBOT": [
         "100074278195157",
-        "100078846463315"
+        "100078846463315",
+        "100051451965796",
+        "100051451965796"
     ],
     "NDH": [
         "100074278195157"
@@ -72,7 +72,10 @@
         "rewardCoin": 100000
     },
     "work": {
-        "cooldownTime": 21600000
+        "cooldownTime": 21600000,
+        "workingTime": 300000,
+        "maxLevel": 10,
+        "rewardPerLevel": 50000
     },
     "xidach": {
         "maxPlayers": 5,

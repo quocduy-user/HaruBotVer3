@@ -4,14 +4,17 @@
 */
 module.exports.config = {
     name: "work",
-    version: "1.0.2",
+    version: "2.0.0",
     hasPermssion: 0,
-    credits: "⚡D-Jukie", 
-    description: "Làm việc để có tiền, có làm thì mới có ăn",
+    credits: "⚡D-Jukie & Modified by Copilot", 
+    description: "Làm việc để có tiền, có làm thì mới có ăn, thăng tiến để nhận thưởng",
     commandCategory: "Money",
     cooldowns: 5,
     envConfig: {
-        cooldownTime: 21600000
+        cooldownTime: 21600000,
+        workingTime: 300000, // 5 phút làm việc
+        maxLevel: 10, // Level tối đa
+        rewardPerLevel: 50000 // Thưởng mỗi lần lên level
     }
 };
 module.exports.languages = {
@@ -61,7 +64,20 @@ var work7 = rdex1[Math.floor(Math.random() * rdex1.length)];
   var rdex12 = ['thu tiền bảo kê', 'dành lãnh địa bàn', 'bán ma túy', 'buôn bán mại dâm', 'buôn lậu', 'cướp ngân hàng', 'bán vũ khí']; //random công việc khi thử thách 
 var work8 = rdex12[Math.floor(Math.random() * rdex12.length)];
   
-var rdex13 = ['Cá Thu', 'Cá Sấu', 'Cá Mập', 'Cá Heo', 'Cá Voi Sát Thủ', 'Mực Ma', 'Tôm Hùm Alaska', 'Cá Voi Xanh', 'Rùa Leviathanochelys aenigmatica', 'Sứa Stygiomedusa gigantea', 'Cua Hoàng Đế', 'Cá Hồi Đại Dương', 'Cá Bò Picasso', 'Cá Bướm Mỏ Nhọn', 'Cá Hồng Y', 'Cá Hề', 'Tôm Tít', 'Cá Chim Hoàng Đế', 'Hải Sâm', 'Cá Mao Tiên', 'Cá Bắp Nẻ Xanh', 'Cá Nóc', 'Cá Đuối', 'Cá Bò Hòm', 'Bạch Tuộc Dumbo', 'Cá Mặt Trăng', 'Cá Mập Megalodon', 'Cá Nhà Táng', 'Cá Voi Lưng Gù', 'Cá Ngựa', 'Cá Ngừ', 'Cá Cam', 'Cá Đuôi Gai Vàng', 'Cá Mập Đầu Búa', 'Cá Mập Pliotrema Kajae', 'Mực Colossal', 'Người Cá', 'Cá Bubble Eye', 'Cá Mập Greenland', 'Cá Oarfish', 'Cua Nhện']; //random công việc khi thử thách 
+// Thêm công việc mới
+var rdex13 = ['Cá Thu', 'Cá Sấu', 'Cá Mập', 'Cá Heo', 'Cá Voi Sát Thủ', 'Mực Ma', 'Tôm Hùm Alaska', 'Cá Voi Xanh', 'Rùa Leviathanochelys aenigmatica', 'Sứa Stygiomedusa gigantea', 'Cua Hoàng Đế', 'Cá Hồi Đại Dương', 'Cá Bò Picasso', 'Cá Bướm Mỏ Nhọn', 'Cá Hồng Y', 'Cá Hề', 'Tôm Tít', 'Cá Chim Hoàng Đế', 'Hải Sâm', 'Cá Mao Tiên', 'Cá Bắp Nẻ Xanh', 'Cá Nóc', 'Cá Đuối', 'Cá Bò Hòm', 'Bạch Tuộc Dumbo', 'Cá Mặt Trăng', 'Cá Mập Megalodon', 'Cá Nhà Táng', 'Cá Voi Lưng Gù', 'Cá Ngựa', 'Cá Ngừ', 'Cá Cam', 'Cá Đuôi Gai Vàng', 'Cá Mập Đầu Búa', 'Cá Mập Pliotrema Kajae', 'Mực Colossal', 'Người Cá', 'Cá Bubble Eye', 'Cá Mập Greenland', 'Cá Oarfish', 'Cua Nhện'];
+
+// Công việc mới - Khu game
+var rdGame = ['stream game', 'review game', 'test game', 'thiết kế game', 'lập trình game', 'quản lý cyber game'];
+var workGame = rdGame[Math.floor(Math.random() * rdGame.length)];
+
+// Công việc mới - Khu giải trí
+var rdEnt = ['ca sĩ', 'diễn viên', 'người mẫu', 'vũ công', 'nghệ sĩ', 'biên đạo', 'đạo diễn'];
+var workEnt = rdEnt[Math.floor(Math.random() * rdEnt.length)];
+
+// Công việc mới - Khu công nghệ
+var rdTech = ['lập trình viên', 'kỹ sư phần mềm', 'chuyên gia AI', 'quản trị mạng', 'phân tích dữ liệu', 'thiết kế UI/UX'];
+var workTech = rdTech[Math.floor(Math.random() * rdTech.length)]; //random công việc khi thử thách 
 var work9 = rdex13[Math.floor(Math.random() * rdex13.length)];
 
 var rdex0 = ['Đại Tây Dương', 'Thái Bình Dương', 'Tam Giác Quỷ', 'Bắc Băng Dương', 'Ấn Độ Dương', 'Nam Đại Dương', 'Vùng caribe', 'Châu Đại Đương', 'vùng Australia', 'Philippines', 'San Hô', 'Đông', 'Nam Cực', 'Địa Trung Hải', 'Bering', 'Tây Ban Nha', 'Vịnh Mexico', 'Vịnh Monterey']; //random công việc khi thử thách 
@@ -70,23 +86,51 @@ var lo = rdex0[Math.floor(Math.random() * rdex0.length)];
 var msg = "";
     switch(handleReply.type) {
         case "choosee": {
+            // Lấy level hiện tại
+            let level = data.workLevel || 1;
+            let exp = data.workExp || 0;
+            let expNeeded = level * 100;
+            
+            // Tăng exp ngẫu nhiên (10-20)
+            let expGain = Math.floor(Math.random() * 11) + 10;
+            exp += expGain;
+            
+            // Kiểm tra lên level
+            let maxLevel = 10; // Đặt giá trị mặc định
+            let rewardPerLevel = 50000; // Đặt giá trị mặc định
+            if (exp >= expNeeded && level < maxLevel) {
+                level++;
+                exp = 0;
+                // Thưởng tiền khi lên level
+                await Currencies.increaseMoney(event.senderID, rewardPerLevel);
+                api.sendMessage(`🎉 Chúc mừng bạn đã thăng cấp công việc! Level hiện tại: ${level}\n💰 Nhận thưởng: ${rewardPerLevel}$`, threadID);
+            }
+            
+            // Lưu level và exp
+            data.workLevel = level;
+            data.workExp = exp;
+            await Currencies.setData(event.senderID, { data });
+            
+            let bonusMultiplier = 1 + (level * 0.1); // Tăng 10% tiền thưởng mỗi level
             
             switch(event.body) {
-                case "1": msg = `Bạn đang làm việc ${work1} ở khu công nghiệp và kiếm được ${coinscn}$` ;await Currencies.increaseMoney(event.senderID, parseInt(coinscn)); break;             
-                case "2": msg = `Bạn đang làm việc ${work2} ở khu dịch vụ và kiếm được ${coinsdv}$`; await Currencies.increaseMoney(event.senderID, parseInt(coinsdv)); break;
-                case "3": msg = `Bạn ${work3} tại khu mở dầu và bán được ${coinsmd}$`; await Currencies.increaseMoney(event.senderID, parseInt(coinsmd)); break;
-                case "4": msg = `Bạn đang khai thác ${work4} và kiếm được ${coinsq}$`; await Currencies.increaseMoney(event.senderID, parseInt(coinsq)); break;
-                case "5": msg = `Bạn đào được ${work5} và kiếm được ${coinsdd}$` ; await Currencies.increaseMoney(event.senderID, parseInt(coinsdd)); break;
-                case "6": msg = `Bạn được ${work6} cho ${coinsdd1}$ nếu chịt 1 đêm, thế là bạn đồng ý chịt ngay 🤤`; await Currencies.increaseMoney(event.senderID, parseInt(coinsdd1)); break;
-               case "7": msg = `Bạn vừa nhận thử thách 24h ${work7} và nhận được ${coinsex1}$`; await Currencies.increaseMoney(event.senderID, parseInt(coinsex1)); break;
-                case "8": msg = `Bạn vừa ${work8} ở khu cao lầu và kiếm về ${coinsex12}$`; await Currencies.increaseMoney(event.senderID, parseInt(coinsex12)); break;
-                case "9": msg = `🎣 Bạn vừa câu dính ${work9} ở Biển ${lo} và bán được ${coinsex13}$`; await Currencies.increaseMoney(event.senderID, parseInt(coinsex13)); break; //thêm case nếu muốn 
-                case "10": msg = "Đanh update...";
+                case "1": msg = `Bạn đang làm việc ${work1} ở khu công nghiệp và kiếm được ${Math.floor(coinscn * bonusMultiplier)}$ 💼\nKinh nghiệm +${expGain} (${exp}/${expNeeded})` ;await Currencies.increaseMoney(event.senderID, parseInt(coinscn * bonusMultiplier)); break;             
+                case "2": msg = `Bạn đang làm việc ${work2} ở khu dịch vụ và kiếm được ${Math.floor(coinsdv * bonusMultiplier)}$ 🛠️\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsdv * bonusMultiplier)); break;
+                case "3": msg = `Bạn ${work3} tại khu mỏ dầu và bán được ${Math.floor(coinsmd * bonusMultiplier)}$ 🛢️\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsmd * bonusMultiplier)); break;
+                case "4": msg = `Bạn đang khai thác ${work4} và kiếm được ${Math.floor(coinsq * bonusMultiplier)}$ ⛏️\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsq * bonusMultiplier)); break;
+                case "5": msg = `Bạn đào được ${work5} và kiếm được ${Math.floor(coinsdd * bonusMultiplier)}$ 💎\nKinh nghiệm +${expGain} (${exp}/${expNeeded})` ; await Currencies.increaseMoney(event.senderID, parseInt(coinsdd * bonusMultiplier)); break;
+                case "6": msg = `Bạn được ${work6} cho ${Math.floor(coinsdd1 * bonusMultiplier)}$ nếu chịt 1 đêm, thế là bạn đồng ý chịt ngay 🤤\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsdd1 * bonusMultiplier)); break;
+                case "7": msg = `Bạn vừa nhận thử thách 24h ${work7} và nhận được ${Math.floor(coinsex1 * bonusMultiplier)}$ 🎯\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsex1 * bonusMultiplier)); break;
+                case "8": msg = `Bạn vừa ${work8} ở khu cao lầu và kiếm về ${Math.floor(coinsex12 * bonusMultiplier)}$ 🏰\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsex12 * bonusMultiplier)); break;
+                case "9": msg = `🎣 Bạn vừa câu dính ${work9} ở Biển ${lo} và bán được ${Math.floor(coinsex13 * bonusMultiplier)}$\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsex13 * bonusMultiplier)); break;
+                case "10": msg = `👾 Bạn làm ${workGame} trong ngành game và kiếm được ${Math.floor(100000 * bonusMultiplier)}$\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(100000 * bonusMultiplier)); break;
+                case "11": msg = `🎬 Bạn làm ${workEnt} trong ngành giải trí và kiếm được ${Math.floor(120000 * bonusMultiplier)}$\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(120000 * bonusMultiplier)); break;
+                case "12": msg = `💻 Bạn làm ${workTech} trong ngành công nghệ và kiếm được ${Math.floor(150000 * bonusMultiplier)}$\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(150000 * bonusMultiplier)); break;
                 default: break;
             };
             const choose = parseInt(event.body);
             if (isNaN(event.body)) return api.sendMessage("Vui lòng nhập 1 con số", event.threadID, event.messageID);
-            if (choose > 10 || choose < 1) return api.sendMessage("Lựa chọn không nằm trong danh sách.", event.threadID, event.messageID); //thay số case vào số 7
+            if (choose > 12 || choose < 1) return api.sendMessage("Lựa chọn không nằm trong danh sách.", event.threadID, event.messageID); //thay số case vào số thực tế
             api.unsendMessage(handleReply.messageID);
             if (msg == "Chưa update...") {
                 msg = "Update soon...";
@@ -112,16 +156,31 @@ module.exports.run = async ({  event, api, handleReply, Currencies, getText }) =
         return api.sendMessage(getText("cooldown", minutes, (seconds < 10 ? "0" + seconds : seconds)), event.threadID, event.messageID);
     }
     else {    
+    let level = data.workLevel || 1;
+    let exp = data.workExp || 0;
+    let expNeeded = level * 100;
+    let rewardPerLevel = 50000; // Đặt giá trị mặc định
+    
     return api.sendMessage("===[ KIẾM TIỀN MỖI NGÀY ]===" +
-                "\n──────────────────\n1. Khu công nghiệp 🏭" +
+                "\n──────────────────" +
+                `\n💼 Level: ${level} (${exp}/${expNeeded} exp)` +
+                "\n💰 Thưởng mỗi level: " + rewardPerLevel + "$" +
+                "\n──────────────────" +
+                "\n1. Khu công nghiệp 🏭" +
                 "\n2. Khu dịch vụ 💡" +
                 "\n3. Khu mỏ dầu 💎" +
                 "\n4. Khai thác quặng ⛏️" +
                 "\n5. Đào đá 🔨" +
                 "\n6. Làm đĩ =))" +
-                "\n7. Thử thách ⛩️" +                 "\n8. Khu cao lầu 🏰" +
+                "\n7. Thử thách ⛩️" +
+                "\n8. Khu cao lầu 🏰" +
                 "\n9. Câu cá 🎣" +
-                "\n10. Đang update..." + "\n──────────────────\n→ Hãy reply tin nhắn và chọn theo số thứ tự." //thêm hiển thị case tại đây ||  \n[number]. [Ngành nghề]" +
+                "\n10. Khu Game 👾" +
+                "\n11. Khu Giải Trí 🎬" +
+                "\n12. Khu Công Nghệ 💻" +
+                "\n──────────────────" +
+                "\n→ Hãy reply tin nhắn và chọn theo số thứ tự." +
+                "\n→ Càng làm việc càng tăng level, thu nhập tăng 10% mỗi level!" //thêm hiển thị case tại đây ||  \n[number]. [Ngành nghề]" +
             , event.threadID, (error, info) => {
         global.client.handleReply.push({
             type: "choosee",

@@ -343,5 +343,35 @@
         "key": "satoru_34ca",
         "used": true,
         "duration": 29
+    },
+    {
+        "key": "haru_ac56",
+        "used": false,
+        "duration": 30
+    },
+    {
+        "key": "haru_8b33",
+        "used": false,
+        "duration": 30
+    },
+    {
+        "key": "haru_5aab",
+        "used": false,
+        "duration": 30
+    },
+    {
+        "key": "haru_5c3b",
+        "used": true,
+        "duration": 1
+    },
+    {
+        "key": "haru_6c01",
+        "used": false,
+        "duration": 30
+    },
+    {
+        "key": "haru_5c4f",
+        "used": true,
+        "duration": 30
     }
 ]

@@ -2,26 +2,39 @@ const fs = require('fs');
 
 module.exports.config = {
     name: 'dovui',
-    version: '10.02',
+    version: '10.03',
     hasPermssion: 0,
-    credits: 'DC-Nam',
-    description: '',
+    credits: 'DC-Nam & Modified by Copilot',
+    description: 'Trò chơi đố vui có thưởng',
     commandCategory: 'Game',
-    usages: '[]',
-    cooldowns: 3,
+    usages: '[start/stop]',
+    cooldowns: 15,
     dependencies: {
         'axios': ''
     }
 };
 
-const $$ = {
-    max: 1000,
-    min: 500
+const config = {
+    reward: {
+        max: 2000,
+        min: 1000
+    },
+    timeLimit: 30000 // 30 seconds
 };
 
-const localeNum = n => ((+n).toLocaleString()).replace(/,/g, '.');
+const formatMoney = n => ((+n).toLocaleString()).replace(/,/g, '.');
 
-module.exports.run = function({ api, event }) {
+module.exports.run = async function({ api, event, args }) {
+    const command = args[0]?.toLowerCase();
+    if (command === 'stop') {
+        const gameData = global.gameData || {};
+        if (gameData[event.threadID]) {
+            clearTimeout(gameData[event.threadID].timer);
+            delete gameData[event.threadID];
+            return api.sendMessage('> Đã dừng trò chơi!', event.threadID);
+        }
+        return api.sendMessage('> Không có trò chơi nào đang diễn ra!', event.threadID);
+    }
     runRiddle({ api, event, autoNext: false, author: event.senderID });
 };
 
@@ -32,37 +45,85 @@ module.exports.handleReaction = function({ handleReaction: $, api, event }) {
     });
 };
 
-module.exports.handleReply = function({ handleReply: $, api, event, Currencies: $_ }) {
-    const index = $.data.option[(+event.args[0])-0x1];
+module.exports.handleReply = async function({ handleReply: $, api, event, Currencies }) {
+    const gameData = global.gameData || {};
+    const threadGame = gameData[event.threadID];
+    if (!threadGame) return;
+
+    const index = $.data.option[(+event.args[0])-1];
     if (event.senderID != $.author || isNaN(event.args[0]) || !index) return;
+
+    clearTimeout(threadGame.timer);
+    delete gameData[event.threadID];
+    
     api.unsendMessage($.messageID);
-    const ans = index == $.data.correct;
-    const money = {
-        type: `${ans ? 'increaseMoney': 'decreaseMoney'}`,
-        num: randomNumber($$)
-    };
-    api.sendMessage(`→ Đáp Án: ${$.data.correct}\n→ ${ans ? `Lựa chọn của bạn là chính xác + ${localeNum(money.num)}`: `Rất tiếc lựa chọn của bạn đã sai (- ${localeNum(money.num)}`}$)\n→ Reaction để chơi tiếp ! hoặc Reaction 😆 ${$.autoNext ? 'tắt': 'bật'} auto chuyển câu hỏi ! `, event.threadID, (err, msg) => {
-        global.client.handleReaction.push({
-            name: 'dovui', messageID: msg.messageID, autoNext: $.autoNext, author: $.author
+    const isCorrect = index == $.data.correct;
+    const reward = randomNumber(config.reward);
+    
+    try {
+        if (isCorrect) {
+            await Currencies.increaseMoney(event.senderID, reward);
+        }
+        
+        const message = isCorrect ? 
+            `🎉 Chính xác!\n> Đáp án: ${$.data.correct}\n> +${formatMoney(reward)}$` :
+            `❌ Sai rồi!\n> Đáp án đúng: ${$.data.correct}`;
+            
+        api.sendMessage(message + '\n\n> Reaction để chơi tiếp!\n> Reaction 😆 để ' + ($.autoNext ? 'tắt' : 'bật') + ' tự động!', event.threadID, (err, msg) => {
+            if (err) return console.error(err);
+            global.client.handleReaction.push({
+                name: 'dovui',
+                messageID: msg.messageID,
+                autoNext: $.autoNext,
+                author: $.author
+            });
+            if ($.autoNext) runRiddle({ api, event, autoNext: true, author: event.senderID });
         });
-        if ($.autoNext) runRiddle({ api, event, autoNext: true, author: event.senderID });
-        $_money.type;
-    }, event.messageID);
+    } catch (err) {
+        console.error(err);
+        api.sendMessage('→ Đã xảy ra lỗi!', event.threadID);
+    }
 };
 
 function runRiddle({ api, event, autoNext, author }) {
     fs.readFile('modules/commands/data/dovui.json', 'utf8', (err, data) => {
         if (err) {
-            console.log(`Error reading file from disk: ${err}`);
-        } else {
-            const databases = JSON.parse(data);
-            const randomIndex = Math.floor(Math.random() * databases.length);
-            const { question, option, correct } = databases[randomIndex];
-            var count = 0x0;
-            api.sendMessage(`===== ĐỐ VUI =====\n→ Câu Đố: ${question}\n━━━━━━━━━━━━━━━━━━\n${option.map(i => `${++count}. ${i}`).join('\n')}\n━━━━━━━━━━━━━━━━━━\n→ Reply chọn 1 trong số các đáp án bên trên !\n→ Auto Next: ${autoNext ? 'bật': 'tắt'}`, event.threadID, (err, msg) => global.client.handleReply.push({
-                name: 'dovui', messageID: msg.messageID, author, autoNext, data: databases[randomIndex]
-            }));
+            console.error(`Lỗi đọc file: ${err}`);
+            return api.sendMessage('> Đã xảy ra lỗi!', event.threadID);
         }
+
+        const databases = JSON.parse(data);
+        const randomIndex = Math.floor(Math.random() * databases.length);
+        const { question, option, correct } = databases[randomIndex];
+        
+        // Kiểm tra game đang chạy
+        const gameData = global.gameData || {};
+        if (gameData[event.threadID]) {
+            return api.sendMessage('> Đang có một câu đố chưa được trả lời!', event.threadID);
+        }
+
+        // Setup game timer
+        gameData[event.threadID] = {
+            timer: setTimeout(() => {
+                api.sendMessage(`⌛ Hết giờ!\n> Đáp án đúng: ${correct}`, event.threadID);
+                delete gameData[event.threadID];
+            }, config.timeLimit)
+        };
+        global.gameData = gameData;
+
+        // Gửi câu hỏi
+        const message = `❓ ĐỐ VUI CÓ THƯỞNG ❓\n\n> ${question}\n\n${option.map((opt, idx) => `${idx + 1}. ${opt}`).join('\n')}\n\n⏰ Thời gian: 30 giây\n💰 Thưởng: ${formatMoney(config.reward.max)}$`;
+        
+        api.sendMessage(message, event.threadID, (err, msg) => {
+            if (err) return console.error(err);
+            global.client.handleReply.push({
+                name: 'dovui',
+                messageID: msg.messageID,
+                author,
+                autoNext,
+                data: databases[randomIndex]
+            });
+        });
     });
 };
 

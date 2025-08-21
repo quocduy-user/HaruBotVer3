@@ -100,6 +100,83 @@
    },
    {
       "ID":9,
+      "question":"Cái gì đen khi bạn mua nó, đỏ khi dùng nó và xám khi bạn vứt nó đi?",
+      "option":[
+         "Than",
+         "Máu",
+         "Lửa",
+         "Gỗ"
+      ],
+      "correct":"Than"
+   },
+   {
+      "ID":10,
+      "question":"Con gì càng to càng không thấy?",
+      "option":[
+         "Con voi",
+         "Bóng tối",
+         "Con người",
+         "Con mắt"
+      ],
+      "correct":"Bóng tối"
+   },
+   {
+      "ID":11,
+      "question":"Cái gì trong trắng ngoài xanh, trồng đậu trồng hành rất tốt?",
+      "option":[
+         "Củ cải",
+         "Quả dừa",
+         "Hạt giống",
+         "Cây tre"
+      ],
+      "correct":"Quả dừa"
+   },
+   {
+      "ID":12,
+      "question":"Con gì mang được miếng gỗ lớn nhưng không mang được hòn sỏi?",
+      "option":[
+         "Con kiến",
+         "Con voi",
+         "Con sông",
+         "Con đường"
+      ],
+      "correct":"Con sông"
+   },
+   {
+      "ID":13,
+      "question":"Cái gì có thể chạy mà không có chân?",
+      "option":[
+         "Nước",
+         "Gió",
+         "Thời gian", 
+         "Tất cả đáp án trên"
+      ],
+      "correct":"Tất cả đáp án trên"
+   },
+   {
+      "ID":14,
+      "question":"Con gì đi bằng mắt?",
+      "option":[
+         "Con mắt",
+         "Con cua",
+         "Con ốc",
+         "Con tôm"
+      ],
+      "correct":"Con cua"
+   },
+   {
+      "ID":15,
+      "question":"Vừa sinh ra đã có râu là gì?",
+      "option":[
+         "Con chuột",
+         "Con mèo",
+         "Trái ngô",
+         "Con gà"
+      ],
+      "correct":"Trái ngô"
+   },
+   {
+      "ID":9,
       "question":" Trong 1 cuộc thi chạy, nếu bạn vượt qua người thứ 2 bạn sẽ đứng thứ mấy?",
       "option":[
          "2",
