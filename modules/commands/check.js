@@ -57,6 +57,9 @@ this.handleEvent = async function({ api, event, Threads }) {
     const fs = require('fs'); // Directly require fs instead of using global.nodemodule
     const { threadID, senderID } = event;
     const today = moment.tz("Asia/Ho_Chi_Minh").day();
+    const dayKeyNow = moment.tz("Asia/Ho_Chi_Minh").format("YYYY-MM-DD");
+    const weekNow = moment.tz("Asia/Ho_Chi_Minh").isoWeek();
+    const weekYearNow = moment.tz("Asia/Ho_Chi_Minh").isoWeekYear();
     
     // Tạo file dữ liệu mới nếu chưa tồn tại
     if (!fs.existsSync(path + threadID + '.json')) {
@@ -65,6 +68,9 @@ this.handleEvent = async function({ api, event, Threads }) {
         week: [],
         day: [],
         time: today,
+        dayKey: dayKeyNow,
+        weekNumber: weekNow,
+        weekYear: weekYearNow,
         last: {
           time: today,
           day: [],
@@ -77,6 +83,30 @@ this.handleEvent = async function({ api, event, Threads }) {
       var newObj = JSON.parse(fs.readFileSync(path + threadID + '.json'));
     }
     
+    // Đảm bảo các trường cần thiết tồn tại
+    newObj.total = Array.isArray(newObj.total) ? newObj.total : [];
+    newObj.week = Array.isArray(newObj.week) ? newObj.week : [];
+    newObj.day = Array.isArray(newObj.day) ? newObj.day : [];
+    if (!newObj.last) newObj.last = { time: today, day: [], week: [] };
+    if (!newObj.dayKey) newObj.dayKey = dayKeyNow;
+    if (typeof newObj.weekNumber !== 'number') newObj.weekNumber = weekNow;
+    if (typeof newObj.weekYear !== 'number') newObj.weekYear = weekYearNow;
+
+    // Reset NGÀY khi đổi ngày
+    if (newObj.dayKey !== dayKeyNow) {
+      newObj.day.forEach(u => u.count = 0);
+      newObj.last.day = JSON.parse(JSON.stringify(newObj.day));
+      newObj.dayKey = dayKeyNow;
+    }
+
+    // Reset TUẦN khi đổi tuần (ISO week + year)
+    if (newObj.weekNumber !== weekNow || newObj.weekYear !== weekYearNow) {
+      newObj.week.forEach(u => u.count = 0);
+      newObj.last.week = JSON.parse(JSON.stringify(newObj.week));
+      newObj.weekNumber = weekNow;
+      newObj.weekYear = weekYearNow;
+    }
+
     // Cập nhật danh sách thành viên
     const UserIDs = event.participantIDs || [];
     if (UserIDs.length != 0) {
@@ -314,11 +344,18 @@ this.run = async function({ api, event, args, Users, Threads, Currencies }) {
       return api.sendMessage("❎ Bạn không có quyền sử dụng lệnh này", threadID);
     }
     
+    const dayKeyNow = moment.tz("Asia/Ho_Chi_Minh").format("YYYY-MM-DD");
+    const weekNow = moment.tz("Asia/Ho_Chi_Minh").isoWeek();
+    const weekYearNow = moment.tz("Asia/Ho_Chi_Minh").isoWeekYear();
+
     var newObj = {
       total: [],
       week: [],
       day: [],
       time: moment.tz("Asia/Ho_Chi_Minh").day(),
+      dayKey: dayKeyNow,
+      weekNumber: weekNow,
+      weekYear: weekYearNow,
       last: {
         time: moment.tz("Asia/Ho_Chi_Minh").day(),
         day: [],
