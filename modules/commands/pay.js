@@ -10,36 +10,32 @@ module.exports.config = {
 };
 
 module.exports.run = async ({ event, api, Currencies, args, Users }) => {
+    const { parseCurrencyInput, formatVND } = require('../../utils/currency');
     let { threadID, messageID, senderID } = event;
 
     function parseAmount(amount) {
-        amount = amount.toLowerCase();
-        const regex = /^(\d+(\.\d+)?)([kmb])?$/;
-        const match = amount.match(regex);
-        if (!match) return NaN;
-
-        let value = parseFloat(match[1]);
-        const unit = match[3];
-
-        switch (unit) {
-            case 'k': value *= 1000; break;
-            case 'm': value *= 1000000; break;
-            case 'b': value *= 1000000000; break;
-        }
-
-        return Math.floor(value);
+        return parseCurrencyInput(amount);
     }
 
     async function transferMoney(sender, recipient, amount) {
+        const { calculateTransactionFee } = require('../../utils/economyConfig');
         let senderBalance = (await Currencies.getData(sender)).money;
+        
         if (amount <= 0) return api.sendMessage('Số tiền chuyển không hợp lệ', threadID, messageID);
-        if (amount > senderBalance) return api.sendMessage('Số tiền muốn chuyển lớn hơn số dư hiện có!', threadID, messageID);
+        
+        // Calculate transaction fee
+        const fee = calculateTransactionFee(amount);
+        const totalDeduction = amount + fee;
+        
+        if (totalDeduction > senderBalance) {
+            return api.sendMessage(`Số dư không đủ! Cần: ${formatVND(totalDeduction, 'MEDIUM')} (bao gồm phí ${formatVND(fee, 'MEDIUM')})`, threadID, messageID);
+        }
 
         await Currencies.increaseMoney(recipient, amount);
-        await Currencies.decreaseMoney(sender, amount);
+        await Currencies.decreaseMoney(sender, totalDeduction);
 
         let recipientName = (await Users.getData(recipient)).name;
-        return api.sendMessage(`Đã chuyển cho ${recipientName} ${amount.toLocaleString('en-US')}$`, threadID, messageID);
+        return api.sendMessage(`💸 Đã chuyển cho ${recipientName} ${formatVND(amount, 'MEDIUM')}\n💰 Phí giao dịch: ${formatVND(fee, 'MEDIUM')}`, threadID, messageID);
     }
 
     if (event.type == "message_reply") {

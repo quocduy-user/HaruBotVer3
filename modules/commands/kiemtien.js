@@ -104,9 +104,19 @@ module.exports.run = async ({ event, api, Currencies, getText }) => {
             getText("job24"),
             getText("job25")
         ];
-        const amount = Math.floor(Math.random() * 100000);
-        return api.sendMessage(getText("rewarded", job[Math.floor(Math.random() * job.length)], amount), threadID, async () => {
+        const { calculateBalancedReward, checkDailyLimits, updateDailyEarnings } = require('../../utils/economyConfig');
+        const { formatVND } = require('../../utils/currency');
+        const amount = calculateBalancedReward('kiemtien', 1);
+        // Check daily earning limits
+        const userData = await Currencies.getData(senderID);
+        if (!checkDailyLimits(userData, amount)) {
+            return api.sendMessage("⚠️ Bạn đã đạt giới hạn kiếm tiền hàng ngày (150.000 VNĐ). Hãy quay lại vào ngày mai!", threadID);
+        }
+        
+        return api.sendMessage(getText("rewarded", job[Math.floor(Math.random() * job.length)], formatVND(amount, 'MEDIUM')), threadID, async () => {
             await Currencies.increaseMoney(senderID, parseInt(amount));
+            updateDailyEarnings(userData, 'kiemtien', amount);
+            await Currencies.setData(senderID, userData);
             data.workTime = Date.now();
             await Currencies.setData(event.senderID, { data });
             return;

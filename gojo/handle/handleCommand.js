@@ -121,7 +121,7 @@ module.exports = function ({ api, models, Users, Threads, Currencies }) {
              if (checker.bestMatch.rating >= 1.0) {
                command = client.commands.get(checker.bestMatch.target);
              } else {
-               api.sendMessage(`👤 Người dùng: ${name}\n❎ Lệnh không tồn tại, gõ ${prefixbox}menu để xem các lệnh hiện có\n✏️ Lệnh gần giống là: " ${checker.bestMatch.target} "`, event.threadID, async (err, info) => {
+               api.sendMessage(`⚠️ Lệnh không tồn tại hoặc không thể thực thi.\n👤 Người dùng: ${name}\n❎ Gõ ${prefixbox}menu để xem các lệnh hiện có\n✏️ Lệnh gần giống là: ${checker.bestMatch.target}`, event.threadID, async (err, info) => {
                  await new Promise(resolve => setTimeout(resolve, 15 * 1000));
                  return api.unsendMessage(info.messageID);
                }, event.messageID);
@@ -207,7 +207,7 @@ var threadInfoo = (threadInfo.get(threadID) || await Threads.getInfo(threadID));
         quyenhan = "Chúa"
       }
     } else {
-      return api.sendMessage(`⚠️ Đã xảy ra lỗi khi thực thi lệnh này. Vui lòng thử lại sau.`, event.threadID, event.messageID);
+      return api.sendMessage(``, event.threadID, event.messageID);//⚠️ Đã xảy ra lỗi khi thực thi lệnh này. Vui lòng thử lại sau.
     }
   if (command && command.config && command.config.hasPermssion > permssion) return api.sendMessage(`👤 Người dùng: ${ten}\n⛔ Chỉ có ${quyenhan} mới được sử dụng lệnh ${command.config.name} \n⚠️ Bạn không có quyền sử dụng lệnh này\n────────────────────\n⏰ Time: ${Tm}`, event.threadID, async (err, info) => {
   await new Promise(resolve => setTimeout(resolve, 15 * 1000));

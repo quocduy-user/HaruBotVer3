@@ -5,12 +5,13 @@ module.exports.config = {
  credits: "NGH",
  description: "Kiểm tra và quản lý tiền cho bản thân hoặc người khác",
  commandCategory: "Money",
- usages: "check [Tag] | + <số tiền> <Tag> | - <số tiền> <Tag> | del <Tag> | reset |",
+ usages: "money [@tag | reply]",
  cooldowns: 0,
  usePrefix: false
 };
 
 module.exports.run = async function({ api, event, args, Currencies, Users }) {
+     const { formatVND } = require('../../utils/currency');
      const { threadID, messageID, senderID, mentions, type, messageReply } = event;
          let targetID = senderID;
          if (Object.keys(mentions).length == 1) targetID = Object.keys(mentions)[0];
@@ -19,5 +20,5 @@ module.exports.run = async function({ api, event, args, Currencies, Users }) {
          const money = userData ? userData.money : 0;
          const name = (await api.getUserInfo(targetID))[targetID].name;
          api.setMessageReaction("✅", messageID, () => {}, true);
-         return api.sendMessage(`👤 Tên: ${name}\n💵 Số tiền: ${money.toLocaleString()} VND`, threadID, messageID);
+         return api.sendMessage(`👤 Tên: ${name}\n💰 Số tiền: ${formatVND(money, 'MEDIUM')}`, threadID, messageID);
      }

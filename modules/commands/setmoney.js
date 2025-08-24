@@ -25,7 +25,7 @@ if (args.length == 0) return api.sendMessage(`===== [ 𝗦𝗘𝗧𝗠𝗢𝗡�
             var name = (await Users.getData(event.messageReply.senderID)).name;
           await Currencies.increaseMoney(event.messageReply.senderID, money); console.log("done");
    
-          return api.sendMessage(`[ 𝗠𝗼𝗻𝗲𝘆 ] → Đã cộng tiền cho ${name} thành công ${money}$` ,event.threadID)  
+          return api.sendMessage(`[ 𝗠𝗼𝗻𝗲𝘆 ] → Đã cộng tiền cho ${name} thành công ${require('../../utils/currency').formatVND(money, 'MEDIUM')}` ,event.threadID)  
             
           } else if (mentionID.length != 0) {
                 for (singleID of mentionID) {

@@ -3,7 +3,7 @@ module.exports.config = {
 	version: "1.0.2",
 	hasPermssion: 0,
 	credits: "Mirai Team",
-	description: "Nhận 1000000 đô mỗi ngày!",
+	description: "Nhận tiền thưởng hàng ngày!",
 	commandCategory: "Money",
     cooldowns: 5,
     envConfig: {
@@ -15,15 +15,16 @@ module.exports.config = {
 module.exports.languages = {
     "vi": {
         "cooldown": "Bạn đang trong thời gian chờ\nVui lòng thử lại sau: %1 giờ %2 phút %3 giây!",
-        "rewarded": "Bạn đã nhận %1 Đô, để có thể tiếp tục nhận, vui lòng quay lại sau 12 tiếng"
+        "rewarded": "🎁 Bạn đã nhận %1, để có thể tiếp tục nhận, vui lòng quay lại sau 12 tiếng"
     },
     "en": {
         "cooldown": "You received today's rewards, please come back after: %1 hours %2 minutes %3 seconds.",
-        "rewarded": "You received %1$, to continue to receive, please try again after 12 hours"
+        "rewarded": "🎁 You received %1, to continue to receive, please try again after 12 hours"
     }
 }
 
 module.exports.run = async ({ event, api, Currencies, getText }) => {
+    const { formatVND } = require('../../utils/currency');
     const { daily } = global.configModule,
         cooldownTime = daily.cooldownTime,
         rewardCoin = daily.rewardCoin;
@@ -40,7 +41,7 @@ module.exports.run = async ({ event, api, Currencies, getText }) => {
 		return api.sendMessage(getText("cooldown", hours, minutes, (seconds < 10 ? "0" : "") + seconds), threadID);
     }
 
-    else return api.sendMessage(getText("rewarded", coinscn), threadID, async () => {
+    else return api.sendMessage(getText("rewarded", formatVND(coinscn, 'MEDIUM')), threadID, async () => {
         await Currencies.increaseMoney(senderID, coinscn);
         data.dailyCoolDown = Date.now();
         await Currencies.setData(senderID, { data });
