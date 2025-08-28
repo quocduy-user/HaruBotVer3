@@ -2,6 +2,7 @@
 @credit ⚡️D-Jukie
 @vui lòng không chỉnh sửa credit
 */
+const { calculateBalancedReward, checkDailyLimits, updateDailyEarnings, ECONOMY_CONFIG } = require('../../utils/economyConfig.js');
 module.exports.config = {
     name: "work",
     version: "2.0.0",
@@ -29,16 +30,10 @@ module.exports.handleReply = async ({ event, api, handleReply, Currencies, getTe
     const { threadID, messageID, senderID } = event;
   if (senderID !== handleReply.author) return api.sendMessage("Chỗ người khác đang mần ăn, cút đi chỗ khác chơi 🙂", threadID, messageID);
     let data = (await Currencies.getData(senderID)).data || {};
-//random coins nhận được khi làm việc ít nhất 200
-var coinscn = Math.floor(Math.random() * 100000); //random coins khi làm ở khu công nghiệp
-var coinsdv = Math.floor(Math.random() * 100000); //random coins khi làm ở khu dịch vụ
-var coinsmd = Math.floor(Math.random() * 100000); //random coins khi làm ở mỏ dầu
-var coinsq = Math.floor(Math.random() * 100000); //random coins khi khai thác quặng
-var coinsdd = Math.floor(Math.random() * 100000); //random coins khi đào đá
-var coinsdd1 = Math.floor(Math.random() * 100000); //random coins khi đào đá
-var coinsex1 = Math.floor(Math.random() * 100000);
-var coinsex12 = Math.floor(Math.random() * 100000);
-var coinsex13 = Math.floor(Math.random() * 100000);
+// Sử dụng calculateBalancedReward thay vì random không kiểm soát
+const userLevel = data.workLevel || 1;
+const userActivity = 1; // Có thể tính toán dựa trên hoạt động thực tế
+const baseReward = calculateBalancedReward('work', userLevel, userActivity);
 //random công việc cần làm
 var rdcn = ['tuyển dụng nhân viên', 'quản trị khách sạn', 'tại nhà máy điện', 'đầu bếp trong nhà hàng', 'công nhân']; //random công việc khi làm ở khu công nghiệp
 var work1 = rdcn[Math.floor(Math.random() * rdcn.length)];   
@@ -101,9 +96,10 @@ var msg = "";
             if (exp >= expNeeded && level < maxLevel) {
                 level++;
                 exp = 0;
-                // Thưởng tiền khi lên level
-                await Currencies.increaseMoney(event.senderID, rewardPerLevel);
-                api.sendMessage(`🎉 Chúc mừng bạn đã thăng cấp công việc! Level hiện tại: ${level}\n💰 Nhận thưởng: ${rewardPerLevel}$`, threadID);
+                // Thưởng tiền khi lên level - sử dụng phần thưởng cân bằng
+                const levelReward = calculateBalancedReward('work', level, userActivity) * 2; // x2 cho thưởng lên cấp
+                await Currencies.increaseMoney(event.senderID, levelReward);
+                api.sendMessage(`🎉 Chúc mừng bạn đã thăng cấp công việc! Level hiện tại: ${level}\n💰 Nhận thưởng: ${levelReward}$`, threadID);
             }
             
             // Lưu level và exp
@@ -113,35 +109,56 @@ var msg = "";
             
             let bonusMultiplier = 1 + (level * 0.1); // Tăng 10% tiền thưởng mỗi level
             
+            // Tính toán phần thưởng cân bằng cho từng loại công việc
+            let workReward = Math.floor(baseReward * bonusMultiplier);
+            const userData = await Currencies.getData(event.senderID);
+            
+            // Kiểm tra giới hạn thu nhập hàng ngày
+            if (!checkDailyLimits(userData, workReward, 'work')) {
+                const maxEarn = ECONOMY_CONFIG.DAILY_LIMITS.MAX_WORK_EARNINGS - (userData.data?.dailyEarnings?.work || 0);
+                if (maxEarn > 0) {
+                    workReward = maxEarn;
+                    api.sendMessage(`Bạn đã gần đạt giới hạn thu nhập từ làm việc hôm nay. Phần thưởng được điều chỉnh thành ${workReward.toLocaleString('vi-VN')}đ.`, threadID);
+                } else {
+                    api.sendMessage(`Bạn đã đạt giới hạn thu nhập từ làm việc hôm nay. Hãy thử lại vào ngày mai.`, threadID);
+                    return;
+                }
+            }
+            
             switch(event.body) {
-                case "1": msg = `Bạn đang làm việc ${work1} ở khu công nghiệp và kiếm được ${Math.floor(coinscn * bonusMultiplier)}$ 💼\nKinh nghiệm +${expGain} (${exp}/${expNeeded})` ;await Currencies.increaseMoney(event.senderID, parseInt(coinscn * bonusMultiplier)); break;             
-                case "2": msg = `Bạn đang làm việc ${work2} ở khu dịch vụ và kiếm được ${Math.floor(coinsdv * bonusMultiplier)}$ 🛠️\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsdv * bonusMultiplier)); break;
-                case "3": msg = `Bạn ${work3} tại khu mỏ dầu và bán được ${Math.floor(coinsmd * bonusMultiplier)}$ 🛢️\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsmd * bonusMultiplier)); break;
-                case "4": msg = `Bạn đang khai thác ${work4} và kiếm được ${Math.floor(coinsq * bonusMultiplier)}$ ⛏️\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsq * bonusMultiplier)); break;
-                case "5": msg = `Bạn đào được ${work5} và kiếm được ${Math.floor(coinsdd * bonusMultiplier)}$ 💎\nKinh nghiệm +${expGain} (${exp}/${expNeeded})` ; await Currencies.increaseMoney(event.senderID, parseInt(coinsdd * bonusMultiplier)); break;
-                case "6": msg = `Bạn được ${work6} cho ${Math.floor(coinsdd1 * bonusMultiplier)}$ nếu chịt 1 đêm, thế là bạn đồng ý chịt ngay 🤤\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsdd1 * bonusMultiplier)); break;
-                case "7": msg = `Bạn vừa nhận thử thách 24h ${work7} và nhận được ${Math.floor(coinsex1 * bonusMultiplier)}$ 🎯\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsex1 * bonusMultiplier)); break;
-                case "8": msg = `Bạn vừa ${work8} ở khu cao lầu và kiếm về ${Math.floor(coinsex12 * bonusMultiplier)}$ 🏰\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsex12 * bonusMultiplier)); break;
-                case "9": msg = `🎣 Bạn vừa câu dính ${work9} ở Biển ${lo} và bán được ${Math.floor(coinsex13 * bonusMultiplier)}$\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(coinsex13 * bonusMultiplier)); break;
-                case "10": msg = `👾 Bạn làm ${workGame} trong ngành game và kiếm được ${Math.floor(100000 * bonusMultiplier)}$\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(100000 * bonusMultiplier)); break;
-                case "11": msg = `🎬 Bạn làm ${workEnt} trong ngành giải trí và kiếm được ${Math.floor(120000 * bonusMultiplier)}$\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(120000 * bonusMultiplier)); break;
-                case "12": msg = `💻 Bạn làm ${workTech} trong ngành công nghệ và kiếm được ${Math.floor(150000 * bonusMultiplier)}$\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; await Currencies.increaseMoney(event.senderID, parseInt(150000 * bonusMultiplier)); break;
+                case "1": msg = `Bạn đang làm việc ${work1} ở khu công nghiệp và kiếm được ${workReward}$ 💼\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; break;             
+                case "2": msg = `Bạn đang làm việc ${work2} ở khu dịch vụ và kiếm được ${workReward}$ 🛠️\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; break;
+                case "3": msg = `Bạn ${work3} tại khu mỏ dầu và bán được ${workReward}$ 🛢️\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; break;
+                case "4": msg = `Bạn đang khai thác ${work4} và kiếm được ${workReward}$ ⛏️\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; break;
+                case "5": msg = `Bạn đào được ${work5} và kiếm được ${workReward}$ 💎\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; break;
+                case "6": msg = `Bạn được ${work6} cho ${workReward}$ nếu chịt 1 đêm, thế là bạn đồng ý chịt ngay 🤤\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; break;
+                case "7": msg = `Bạn vừa nhận thử thách 24h ${work7} và nhận được ${workReward}$ 🎯\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; break;
+                case "8": msg = `Bạn vừa ${work8} ở khu cao lầu và kiếm về ${workReward}$ 🏰\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; break;
+                case "9": msg = `🎣 Bạn vừa câu dính ${work9} ở Biển ${lo} và bán được ${workReward}$\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; break;
+                case "10": msg = `👾 Bạn làm ${workGame} trong ngành game và kiếm được ${workReward}$\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; break;
+                case "11": msg = `🎬 Bạn làm ${workEnt} trong ngành giải trí và kiếm được ${workReward}$\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; break;
+                case "12": msg = `💻 Bạn làm ${workTech} trong ngành công nghệ và kiếm được ${workReward}$\nKinh nghiệm +${expGain} (${exp}/${expNeeded})`; break;
                 default: break;
-            };
+            }
+            
+            // Cộng tiền và cập nhật thu nhập hàng ngày
+            await Currencies.increaseMoney(event.senderID, workReward);
+            updateDailyEarnings(userData, 'work', workReward);
+            await Currencies.setData(event.senderID, { data: userData.data });
+            
             const choose = parseInt(event.body);
             if (isNaN(event.body)) return api.sendMessage("Vui lòng nhập 1 con số", event.threadID, event.messageID);
-            if (choose > 12 || choose < 1) return api.sendMessage("Lựa chọn không nằm trong danh sách.", event.threadID, event.messageID); //thay số case vào số thực tế
+            if (choose > 12 || choose < 1) return api.sendMessage("Lựa chọn không nằm trong danh sách.", event.threadID, event.messageID);
             api.unsendMessage(handleReply.messageID);
             if (msg == "Chưa update...") {
                 msg = "Update soon...";
-            };
+            }
             return api.sendMessage(`${msg}`, threadID, async () => {
-            
-            
-        });
-
-    };
-}
+                data.work2Time = Date.now();
+                await Currencies.setData(event.senderID, { data });
+            });
+        }
+    }
 }
 module.exports.run = async ({  event, api, handleReply, Currencies, getText }) => {
     const { threadID, messageID, senderID } = event;

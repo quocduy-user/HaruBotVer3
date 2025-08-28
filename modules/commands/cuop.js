@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { checkBettingLimits, checkDailyLimits, updateDailyEarnings, ECONOMY_CONFIG } = require('../../utils/economyConfig.js');
 
 const cc = 8; // Tỉ lệ thành công cơ bản
 const maxLevelBonus = 30; // Tỷ lệ cộng thêm tối đa ở cấp độ cao nhất
@@ -260,10 +261,32 @@ module.exports.run = async function({ api, event, args, Users, Currencies }) {
     if (tile <= successRate) {
         const minSteal = Math.ceil(targetMoney * 0.01); // Ít nhất 1% tiền
         const maxSteal = Math.floor(targetMoney * 0.1); // Tối đa 10% tiền
-        const stolenAmount = Math.floor(Math.random() * (maxSteal - minSteal + 1)) + minSteal;
+        let stolenAmount = Math.floor(Math.random() * (maxSteal - minSteal + 1)) + minSteal;
+        
+        // Áp dụng giới hạn cược cho việc cướp
+        const bettingValidation = checkBettingLimits(stolenAmount, userMoney.money);
+        if (!bettingValidation.isValid) {
+            stolenAmount = Math.min(stolenAmount, Math.floor(userMoney.money * ECONOMY_CONFIG.BETTING_LIMITS.MAX_BET_PERCENT));
+        }
+        
+        // Kiểm tra giới hạn thu nhập hàng ngày
+        const currentUserData = await Currencies.getData(senderID);
+        if (!checkDailyLimits(currentUserData, stolenAmount, 'games')) {
+            const maxEarn = ECONOMY_CONFIG.DAILY_LIMITS.MAX_GAME_EARNINGS - (currentUserData.data?.dailyEarnings?.games || 0);
+            if (maxEarn > 0) {
+                stolenAmount = Math.min(stolenAmount, maxEarn);
+                api.sendMessage(`Bạn đã gần đạt giới hạn thu nhập từ trò chơi hôm nay. Số tiền cướp được điều chỉnh thành ${stolenAmount.toLocaleString('vi-VN')}đ.`, threadID);
+            } else {
+                return api.sendMessage(`Bạn đã đạt giới hạn thu nhập từ trò chơi hôm nay. Không thể cướp thêm.`, threadID);
+            }
+        }
 
         await Currencies.increaseMoney(senderID, stolenAmount);
         await Currencies.decreaseMoney(mention, stolenAmount);
+        
+        // Cập nhật thu nhập hàng ngày
+        updateDailyEarnings(currentUserData, 'games', stolenAmount);
+        await Currencies.setData(senderID, { data: currentUserData.data });
         
         userData = await updateUserData(senderID, (data) => {
             data.exp += stolenAmount * 0.1; // Giảm exp nhận được

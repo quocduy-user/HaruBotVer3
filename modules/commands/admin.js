@@ -1,14 +1,46 @@
 const { readdirSync, readFileSync, writeFileSync, existsSync } = require("fs-extra");
 const { resolve } = require("path");
 
+// Hàm tiện ích
+const formatUptime = () => {
+    const uptime = process.uptime();
+    const days = Math.floor(uptime / 86400);
+    const hours = Math.floor((uptime % 86400) / 3600);
+    const minutes = Math.floor((uptime % 3600) / 60);
+    return `${days}d ${hours}h ${minutes}m`;
+};
+
+const getSystemStats = () => {
+    const memUsage = process.memoryUsage();
+    return {
+        uptime: formatUptime(),
+        memory: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+        threads: global.data.allThreadID?.length || 0,
+        users: global.data.allUserID?.length || 0
+    };
+};
+
+const logAdminAction = (action, performer, target = null) => {
+    const timestamp = new Date().toLocaleString('vi-VN');
+    const logEntry = `[${timestamp}] ${performer} ${action}${target ? ` ${target}` : ''}`;
+    
+    const logPath = resolve(__dirname, 'data', 'adminLog.txt');
+    const currentLog = existsSync(logPath) ? readFileSync(logPath, 'utf8') : '';
+    const newLog = logEntry + '\n' + currentLog;
+    
+    // Giữ chỉ 100 dòng log gần nhất
+    const lines = newLog.split('\n').slice(0, 100);
+    writeFileSync(logPath, lines.join('\n'));
+};
+
 module.exports.config = {
     name: "admin",
-    version: "1.0.6",
+    version: "2.0.0",
     hasPermssion: 1,
-    credits: "Mirai Team - Modified by Satoru",
-    description: "Quản lý và cấu hình ADMIN BOT",
+    credits: "Mirai Team - Modified by Satoru - Upgraded by Cascade",
+    description: "Hệ thống quản lý admin nâng cao với thống kê và giám sát",
     commandCategory: "Hệ thống",
-    usages: "< add/remove | Super Admin & Admin > | < list/only/ibrieng >",
+    usages: "admin [list|add|remove|stats|backup|restore|log|help]",
     cooldowns: 2,
     dependencies: {
         "fs-extra": ""
@@ -90,18 +122,25 @@ module.exports.run = async function({ api, event, args, Users, permssion, getTex
     const config = require(configPath);
     const mention = Object.keys(mentions);
     
-    if (!args[0]) {
+    if (!args[0] || args[0] === "help") {
+        const stats = getSystemStats();
         return api.sendMessage(
-            `=== [ ADMIN PANEL ] ===\n━━━━━━━━━━━━━━━━━━\n\n` +
-            `→ admin list: Xem danh sách quản lý\n` +
-            `→ admin add: Thêm quản trị viên\n` +
-            `→ admin remove: Gỡ quản trị viên\n` +
-            `→ admin addndh: Thêm người hỗ trợ\n` +
-            `→ admin removendh: Gỡ người hỗ trợ\n` +
-            `→ admin qtvonly: Bật/tắt chế độ QTV\n` +
-            `→ admin only: Bật/tắt chế độ Admin\n` +
-            `→ admin ibrieng: Bật/tắt chat riêng\n\n` +
-            `━━━━━━━━━━━━━━━━━━`,
+            `🔧 **ADMIN PANEL 2.0** 🔧\n` +
+            `⏱️ Uptime: ${stats.uptime} | 💾 RAM: ${stats.memory}\n` +
+            `👥 ${stats.threads} nhóm | 👤 ${stats.users} người dùng\n\n` +
+            `📋 **QUẢN LÝ ADMIN:**\n` +
+            `• \`admin list\` - Danh sách admin/NDH\n` +
+            `• \`admin add\` - Thêm admin\n` +
+            `• \`admin addndh\` - Thêm người hỗ trợ\n` +
+            `• \`admin remove/removendh\` - Gỡ quyền\n\n` +
+            `⚙️ **CẤU HÌNH:**\n` +
+            `• \`admin qtvonly\` - Chế độ QTV only\n` +
+            `• \`admin only\` - Chế độ Admin only\n` +
+            `• \`admin ibrieng\` - Chat riêng\n\n` +
+            `📊 **THỐNG KÊ & GIÁM SÁT:**\n` +
+            `• \`admin stats\` - Thống kê hệ thống\n` +
+            `• \`admin log\` - Lịch sử hoạt động\n` +
+            `• \`admin backup\` - Sao lưu cấu hình`,
             threadID, messageID
         );
     }
@@ -195,9 +234,75 @@ module.exports.run = async function({ api, event, args, Users, permssion, getTex
             const added = await addUsers(uids, "ADMIN");
             if (added.length > 0) {
                 writeFileSync(configPath, JSON.stringify(config, null, 4), 'utf8');
+                logAdminAction("thêm admin", await Users.getNameUser(senderID), added.join(", "));
                 return api.sendMessage(getText("addedSuccess", added.length, "ADMIN BOT", added.join("\n")), threadID, messageID);
             }
             break;
+        }
+
+        case "stats": {
+            if (permssion < 2) return api.sendMessage(getText("notHavePermssion", "stats"), threadID, messageID);
+            const stats = getSystemStats();
+            const pathData = resolve(__dirname, 'data', 'dataAdbox.json');
+            const database = existsSync(pathData) ? require(pathData) : {};
+            
+            const adminOnlyCount = Object.keys(database.only || {}).filter(id => database.only[id]).length;
+            const qtvOnlyCount = Object.keys(database.adminbox || {}).filter(id => database.adminbox[id]).length;
+            
+            return api.sendMessage(
+                `📊 **THỐNG KÊ HỆ THỐNG** 📊\n\n` +
+                `🤖 **Bot Status:**\n` +
+                `⏱️ Uptime: ${stats.uptime}\n` +
+                `💾 RAM: ${stats.memory}\n` +
+                `👥 Nhóm: ${stats.threads}\n` +
+                `👤 Người dùng: ${stats.users}\n\n` +
+                `👨‍💻 **Admin:**\n` +
+                `🔧 Admin Bot: ${config.ADMINBOT.length}\n` +
+                `🛠️ Người hỗ trợ: ${config.NDH.length}\n\n` +
+                `⚙️ **Cấu hình nhóm:**\n` +
+                `🔒 Admin Only: ${adminOnlyCount} nhóm\n` +
+                `👮 QTV Only: ${qtvOnlyCount} nhóm`,
+                threadID, messageID
+            );
+        }
+
+        case "log": {
+            if (permssion < 2) return api.sendMessage(getText("notHavePermssion", "log"), threadID, messageID);
+            const logPath = resolve(__dirname, 'data', 'adminLog.txt');
+            
+            if (!existsSync(logPath)) {
+                return api.sendMessage("📝 Chưa có lịch sử hoạt động nào!", threadID, messageID);
+            }
+            
+            const logs = readFileSync(logPath, 'utf8').split('\n').slice(0, 10);
+            return api.sendMessage(
+                `📝 **LỊCH SỬ HOẠT ĐỘNG** (10 gần nhất)\n\n${logs.join('\n')}`,
+                threadID, messageID
+            );
+        }
+
+        case "backup": {
+            if (permssion !== 3) return api.sendMessage(getText("notHavePermssion", "backup"), threadID, messageID);
+            const backupData = {
+                timestamp: new Date().toISOString(),
+                config: {
+                    ADMINBOT: config.ADMINBOT,
+                    NDH: config.NDH
+                }
+            };
+            
+            const backupPath = resolve(__dirname, 'data', `backup_${Date.now()}.json`);
+            writeFileSync(backupPath, JSON.stringify(backupData, null, 4));
+            logAdminAction("tạo backup", await Users.getNameUser(senderID));
+            
+            return api.sendMessage(
+                `💾 **BACKUP THÀNH CÔNG**\n\n` +
+                `📁 File: backup_${Date.now()}.json\n` +
+                `📊 Admin: ${config.ADMINBOT.length}\n` +
+                `📊 NDH: ${config.NDH.length}\n` +
+                `⏰ Thời gian: ${new Date().toLocaleString('vi-VN')}`,
+                threadID, messageID
+            );
         }
 
         case "addndh": {
@@ -206,6 +311,7 @@ module.exports.run = async function({ api, event, args, Users, permssion, getTex
             const added = await addUsers(uids, "NDH");
             if (added.length > 0) {
                 writeFileSync(configPath, JSON.stringify(config, null, 4), 'utf8');
+                logAdminAction("thêm NDH", await Users.getNameUser(senderID), added.join(", "));
                 return api.sendMessage(getText("addedSuccess", added.length, "NGƯỜI HỖ TRỢ", added.join("\n")), threadID, messageID);
             }
             break;
@@ -217,7 +323,8 @@ module.exports.run = async function({ api, event, args, Users, permssion, getTex
             const removed = await removeUsers(uids, "ADMIN");
             if (removed.length > 0) {
                 writeFileSync(configPath, JSON.stringify(config, null, 4), 'utf8');
-                return api.sendMessage(getText("removedSuccess", "ADMIN BOT", removed.length, removed.join("\n")), threadID, messageID);
+                logAdminAction("gỡ admin", await Users.getNameUser(senderID), removed.join(", "));
+                return api.sendMessage(getText("removedSuccess", removed.length, "ADMIN BOT", removed.join("\n")), threadID, messageID);
             }
             break;
         }
@@ -228,7 +335,8 @@ module.exports.run = async function({ api, event, args, Users, permssion, getTex
             const removed = await removeUsers(uids, "NDH");
             if (removed.length > 0) {
                 writeFileSync(configPath, JSON.stringify(config, null, 4), 'utf8');
-                return api.sendMessage(getText("removedSuccess", "NGƯỜI HỖ TRỢ", removed.length, removed.join("\n")), threadID, messageID);
+                logAdminAction("gỡ NDH", await Users.getNameUser(senderID), removed.join(", "));
+                return api.sendMessage(getText("removedSuccess", removed.length, "NGƯỜI HỖ TRỢ", removed.join("\n")), threadID, messageID);
             }
             break;
         }

@@ -16,22 +16,13 @@
     "encryptSt": true,
     "UPTIME": false,
     "DASHBOARD": false,
-    "commandDisabled": [
-        "my.js",
-        "my.js",
-        "ghepdoi.js",
-        "ghepdoi.js",
-        "avtdoi.js",
-        "avtdoi.js"
-    ],
+    "commandDisabled": [],
     "eventDisabled": [],
     "BOTNAME": "Haru",
     "FACEBOOK_ADMIN": "facebook.com/user.quocduy",
     "PREFIX": ".",
     "ADMINBOT": [
         "100074278195157",
-        "100078846463315",
-        "100051451965796",
         "100051451965796"
     ],
     "NDH": [

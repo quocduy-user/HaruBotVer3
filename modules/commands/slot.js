@@ -1,4 +1,5 @@
     var request = require("request");const { readdirSync, readFileSync, writeFileSync, existsSync, copySync, createWriteStream, createReadStream } = require("fs-extra");
+const { checkBettingLimits, checkDailyLimits, updateDailyEarnings, ECONOMY_CONFIG } = require('../../utils/economyConfig.js');
     module.exports.config = {
         name: "slot",
         version: "1.0.0",
@@ -90,8 +91,10 @@ var full = [];
                 var moneyBet = parseInt(args[1]);
                     if (!args[0] || !isNaN(args[0])) return api.sendMessage("Hãy Bấm: /slot [nho/dưa/đào/táo/dâu/bảy] [số tiền]",event.threadID, event.messageID);
                     if (isNaN(moneyBet) || moneyBet <= 0) return api.sendMessage("Số tiền đặt cược không được để trống hoặc là số tiền âm", event.threadID, event.messageID);
-                if (moneyBet > moneyUser) return api.sendMessage("Số tiền bạn đặt lớn hơn số dư của bạn!", event.threadID, event.messageID);
-            if (moneyBet < 1000) return api.sendMessage("Số tiền đặt không được dưới 1000 đô!", event.threadID, event.messageID);
+                const bettingValidation = checkBettingLimits(moneyBet, moneyUser);
+                if (!bettingValidation.isValid) {
+                    return api.sendMessage(`❎ ${bettingValidation.message}`, event.threadID, event.messageID);
+                }
         var number = [], win = false;
     for (let i = 0; i < 3; i++) number[i] = slotItems[Math.floor(Math.random() * slotItems.length)];
         var itemm;
@@ -140,19 +143,76 @@ var full = [];
                     if (array[1] == itemm) i+=1;
                 if (array[2] == itemm) i+=1;
             if (i == 1) {
-                var mon = parseInt(args[1]) * 1;  
-                    await Currencies.increaseMoney(event.senderID, mon); console.log("s1")
-                        return api.sendMessage({body:`===== 🎰  ${full.join(" | ")} 🎰 =====\n→ Vì có 1 ${icon}\n→ Bạn chọn: ${args[0].toLocaleLowerCase()}\n→ Bạn đã thắng và nhận được: ${mon}$\n━━━━━━━━━━━━━━━━━━\n→ Số dư hiện tại là: ${[moneyUser + mon]}$`,attachment: listimg},event.threadID, event.messageID);
+                let winAmount = parseInt(args[1]) * 1;
+                const userData = await Currencies.getData(event.senderID);
+                
+                // Kiểm tra giới hạn thắng cược hàng ngày
+                if (!checkDailyLimits(userData, winAmount, 'games')) {
+                    const maxWin = ECONOMY_CONFIG.DAILY_LIMITS.MAX_GAME_EARNINGS - (userData.data?.dailyEarnings?.games || 0);
+                    if (maxWin > 0) {
+                        winAmount = maxWin;
+                        api.sendMessage(`Bạn đã đạt giới hạn thắng cược từ trò chơi hôm nay. Phần thưởng được điều chỉnh thành ${winAmount.toLocaleString('vi-VN')}đ.`, event.threadID);
+                    } else {
+                        api.sendMessage(`Bạn đã đạt giới hạn thắng cược từ trò chơi hôm nay. Bạn không nhận được thêm tiền.`, event.threadID);
+                        winAmount = 0;
+                    }
+                }
+                
+                if (winAmount > 0) {
+                    await Currencies.increaseMoney(event.senderID, winAmount);
+                    updateDailyEarnings(userData, 'games', winAmount);
+                    await Currencies.setData(event.senderID, { data: userData.data });
+                }
+                
+                return api.sendMessage({body:`===== 🎰  ${full.join(" | ")} 🎰 =====\n→ Vì có 1 ${icon}\n→ Bạn chọn: ${args[0].toLocaleLowerCase()}\n→ Bạn đã thắng và nhận được: ${winAmount}$\n━━━━━━━━━━━━━━━━━━\n→ Số dư hiện tại là: ${[moneyUser + winAmount]}$`,attachment: listimg},event.threadID, event.messageID);
             }
             else if (i == 2) {
-                var mon = parseInt(args[1]) * 2; 
-                    await Currencies.increaseMoney(event.senderID, mon); console.log("s2")
-                        return api.sendMessage({body:`===== 🎰  ${full.join(" | ")} 🎰 =====\n→ Vì có 2 ${icon}\n→ Bạn chọn: ${args[0].toLocaleLowerCase()}\n→ Bạn đã thắng và nhận được: ${mon}\n━━━━━━━━━━━━━━━━━━\n→ Số dư hiện là: ${[moneyUser + mon]}$`,attachment: listimg},event.threadID, event.messageID);
+                let winAmount = parseInt(args[1]) * 2;
+                const userData = await Currencies.getData(event.senderID);
+                
+                // Kiểm tra giới hạn thắng cược hàng ngày
+                if (!checkDailyLimits(userData, winAmount, 'games')) {
+                    const maxWin = ECONOMY_CONFIG.DAILY_LIMITS.MAX_GAME_EARNINGS - (userData.data?.dailyEarnings?.games || 0);
+                    if (maxWin > 0) {
+                        winAmount = maxWin;
+                        api.sendMessage(`Bạn đã đạt giới hạn thắng cược từ trò chơi hôm nay. Phần thưởng được điều chỉnh thành ${winAmount.toLocaleString('vi-VN')}đ.`, event.threadID);
+                    } else {
+                        api.sendMessage(`Bạn đã đạt giới hạn thắng cược từ trò chơi hôm nay. Bạn không nhận được thêm tiền.`, event.threadID);
+                        winAmount = 0;
+                    }
+                }
+                
+                if (winAmount > 0) {
+                    await Currencies.increaseMoney(event.senderID, winAmount);
+                    updateDailyEarnings(userData, 'games', winAmount);
+                    await Currencies.setData(event.senderID, { data: userData.data });
+                }
+                
+                return api.sendMessage({body:`===== 🎰  ${full.join(" | ")} 🎰 =====\n→ Vì có 2 ${icon}\n→ Bạn chọn: ${args[0].toLocaleLowerCase()}\n→ Bạn đã thắng và nhận được: ${winAmount}$\n━━━━━━━━━━━━━━━━━━\n→ Số dư hiện là: ${[moneyUser + winAmount]}$`,attachment: listimg},event.threadID, event.messageID);
             }
             else if (i == 3) {
-                var mon = parseInt(args[1]) * 3; 
-                    await Currencies.increaseMoney(event.senderID, mon); console.log('s3')
-                        return api.sendMessage({body:`===== 🎰  ${full.join(" | ")} 🎰 =====\n→ Vì có 3 ${icon}\n→ Bạn chọn: ${args[0].toLocaleLowerCase()}\n→ Bạn đã thắng và nhận được: ${mon}$\n━━━━━━━━━━━━━━━━━━\n→ Số dư hiện tại là: ${[moneyUser + mon]}$`,attachment: listimg},event.threadID, event.messageID);
+                let winAmount = parseInt(args[1]) * 3;
+                const userData = await Currencies.getData(event.senderID);
+                
+                // Kiểm tra giới hạn thắng cược hàng ngày
+                if (!checkDailyLimits(userData, winAmount, 'games')) {
+                    const maxWin = ECONOMY_CONFIG.DAILY_LIMITS.MAX_GAME_EARNINGS - (userData.data?.dailyEarnings?.games || 0);
+                    if (maxWin > 0) {
+                        winAmount = maxWin;
+                        api.sendMessage(`Bạn đã đạt giới hạn thắng cược từ trò chơi hôm nay. Phần thưởng được điều chỉnh thành ${winAmount.toLocaleString('vi-VN')}đ.`, event.threadID);
+                    } else {
+                        api.sendMessage(`Bạn đã đạt giới hạn thắng cược từ trò chơi hôm nay. Bạn không nhận được thêm tiền.`, event.threadID);
+                        winAmount = 0;
+                    }
+                }
+                
+                if (winAmount > 0) {
+                    await Currencies.increaseMoney(event.senderID, winAmount);
+                    updateDailyEarnings(userData, 'games', winAmount);
+                    await Currencies.setData(event.senderID, { data: userData.data });
+                }
+                
+                return api.sendMessage({body:`===== 🎰  ${full.join(" | ")} 🎰 =====\n→ Vì có 3 ${icon}\n→ Bạn chọn: ${args[0].toLocaleLowerCase()}\n→ Bạn đã thắng và nhận được: ${winAmount}$\n━━━━━━━━━━━━━━━━━━\n→ Số dư hiện tại là: ${[moneyUser + winAmount]}$`,attachment: listimg},event.threadID, event.messageID);
             }
             else return api.sendMessage("Lỗi ! Code : XX1N",event.threadID,event.messageID);
         } else  {

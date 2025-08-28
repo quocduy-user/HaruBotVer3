@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require("axios");
+const { checkBettingLimits, checkDailyLimits, updateDailyEarnings } = require('../../utils/economyConfig.js');
 
 module.exports.config = {
   name: "taixiu",
@@ -196,11 +197,10 @@ module.exports.handleEvent = async function ({ api, event, args, Currencies, Use
       if (moneyBet <= 0)
         return send("❎ Số tiền cược phải lớn hơn 0!");
         
-      if (moneyBet > moneyUser)
-        return send("❎ Số tiền cược lớn hơn số dư của bạn!");
-        
-      if (moneyBet < 50)
-        return send("❎ Số tiền cược tối thiểu là 50 VND!");
+      const bettingValidation = checkBettingLimits(moneyBet, moneyUser);
+      if (!bettingValidation.isValid) {
+        return send(`❎ ${bettingValidation.message}`);
+      }
 
       if (global.client.taixiu_ca[threadID].status === "pending") {
         const betChoice = command;
@@ -297,8 +297,26 @@ module.exports.handleEvent = async function ({ api, event, args, Currencies, Use
 
         if (result === gameResult) {
           // Người thắng
-          const winAmount = Math.floor(bet * 1.97);
-          await Currencies.increaseMoney(id, winAmount);
+          let winAmount = Math.floor(bet * 1.97);
+          const userData = await Currencies.getData(id);
+
+          // Kiểm tra giới hạn thắng cược hàng ngày
+          if (!checkDailyLimits(userData, winAmount)) {
+              const maxWin = ECONOMY_CONFIG.DAILY_LIMITS.MAX_GAME_EARNINGS - (userData.data?.dailyEarnings?.games || 0);
+              if (maxWin > 0) {
+                  winAmount = maxWin;
+                  api.sendMessage(`Bạn đã đạt giới hạn thắng cược từ trò chơi hôm nay. Phần thưởng của bạn được điều chỉnh thành ${winAmount.toLocaleString('vi-VN')}đ.`, threadID);
+              } else {
+                  api.sendMessage(`Bạn đã đạt giới hạn thắng cược từ trò chơi hôm nay. Bạn không nhận được thêm tiền.`, threadID);
+                  winAmount = 0;
+              }
+          }
+
+          if (winAmount > 0) {
+              await Currencies.increaseMoney(id, winAmount);
+              updateDailyEarnings(userData, 'games', winAmount);
+              await Currencies.setData(id, { data: userData.data });
+          }
           resultList.push(`👤 ${name}: +${winAmount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} VND`);
           winners.push({ id, bet });
 

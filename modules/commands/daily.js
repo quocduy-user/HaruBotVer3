@@ -25,10 +25,14 @@ module.exports.languages = {
 
 module.exports.run = async ({ event, api, Currencies, getText }) => {
     const { formatVND } = require('../../utils/currency');
+    const { calculateBalancedReward, checkDailyLimits, updateDailyEarnings } = require('../../utils/economyConfig.js');
     const { daily } = global.configModule,
-        cooldownTime = daily.cooldownTime,
-        rewardCoin = daily.rewardCoin;
-        var coinscn = Math.floor(Math.random() * rewardCoin);
+        cooldownTime = daily.cooldownTime;
+    
+    // Sử dụng calculateBalancedReward thay vì random không kiểm soát
+    const userData = await Currencies.getData(event.senderID);
+    const userLevel = userData.data?.workLevel || 1;
+    const dailyReward = calculateBalancedReward('daily', userLevel, 1);
     var { senderID, threadID } = event;
 
     let data = (await Currencies.getData(senderID)).data || {};
@@ -41,10 +45,25 @@ module.exports.run = async ({ event, api, Currencies, getText }) => {
 		return api.sendMessage(getText("cooldown", hours, minutes, (seconds < 10 ? "0" : "") + seconds), threadID);
     }
 
-    else return api.sendMessage(getText("rewarded", formatVND(coinscn, 'MEDIUM')), threadID, async () => {
-        await Currencies.increaseMoney(senderID, coinscn);
-        data.dailyCoolDown = Date.now();
-        await Currencies.setData(senderID, { data });
-        return;
-    });
+    else {
+        // Kiểm tra giới hạn thu nhập hàng ngày
+        let finalReward = dailyReward;
+        if (!checkDailyLimits(userData, dailyReward, 'daily')) {
+            const maxEarn = ECONOMY_CONFIG.DAILY_LIMITS.MAX_DAILY_EARNINGS - (userData.data?.dailyEarnings?.daily || 0);
+            if (maxEarn > 0) {
+                finalReward = maxEarn;
+                api.sendMessage(`Bạn đã gần đạt giới hạn thu nhập từ daily hôm nay. Phần thưởng được điều chỉnh thành ${finalReward.toLocaleString('vi-VN')}đ.`, threadID);
+            } else {
+                return api.sendMessage(`Bạn đã đạt giới hạn thu nhập từ daily hôm nay. Hãy thử lại vào ngày mai.`, threadID);
+            }
+        }
+        
+        return api.sendMessage(getText("rewarded", formatVND(finalReward, 'MEDIUM')), threadID, async () => {
+            await Currencies.increaseMoney(senderID, finalReward);
+            updateDailyEarnings(userData, 'daily', finalReward);
+            data.dailyCoolDown = Date.now();
+            await Currencies.setData(senderID, { data: userData.data });
+            return;
+        });
+    }
 }

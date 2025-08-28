@@ -104,21 +104,30 @@ module.exports.run = async ({ event, api, Currencies, getText }) => {
             getText("job24"),
             getText("job25")
         ];
-        const { calculateBalancedReward, checkDailyLimits, updateDailyEarnings } = require('../../utils/economyConfig');
+        const { calculateBalancedReward, checkDailyLimits, updateDailyEarnings, ECONOMY_CONFIG } = require('../../utils/economyConfig');
         const { formatVND } = require('../../utils/currency');
-        const amount = calculateBalancedReward('kiemtien', 1);
-        // Check daily earning limits
+        
+        // Tính toán phần thưởng dựa trên level của user
         const userData = await Currencies.getData(senderID);
-        if (!checkDailyLimits(userData, amount)) {
-            return api.sendMessage("⚠️ Bạn đã đạt giới hạn kiếm tiền hàng ngày (150.000 VNĐ). Hãy quay lại vào ngày mai!", threadID);
+        const userLevel = userData.data?.workLevel || 1;
+        let amount = calculateBalancedReward('kiemtien', userLevel, 1);
+        
+        // Kiểm tra giới hạn thu nhập hàng ngày
+        if (!checkDailyLimits(userData, amount, 'kiemtien')) {
+            const maxEarn = ECONOMY_CONFIG.DAILY_LIMITS.MAX_KIEMTIEN_EARNINGS - (userData.data?.dailyEarnings?.kiemtien || 0);
+            if (maxEarn > 0) {
+                amount = maxEarn;
+                api.sendMessage(`Bạn đã gần đạt giới hạn kiếm tiền hôm nay. Phần thưởng được điều chỉnh thành ${amount.toLocaleString('vi-VN')}đ.`, threadID);
+            } else {
+                return api.sendMessage(`⚠️ Bạn đã đạt giới hạn kiếm tiền hàng ngày. Hãy quay lại vào ngày mai!`, threadID);
+            }
         }
         
         return api.sendMessage(getText("rewarded", job[Math.floor(Math.random() * job.length)], formatVND(amount, 'MEDIUM')), threadID, async () => {
             await Currencies.increaseMoney(senderID, parseInt(amount));
             updateDailyEarnings(userData, 'kiemtien', amount);
-            await Currencies.setData(senderID, userData);
             data.workTime = Date.now();
-            await Currencies.setData(event.senderID, { data });
+            await Currencies.setData(event.senderID, { data: userData.data });
             return;
         }, messageID);
     }     

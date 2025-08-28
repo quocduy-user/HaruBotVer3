@@ -114,7 +114,26 @@ module.exports.handleEvent = async ({ Currencies, event, api, Users }) => {
 			}
 			
 			try {
-				await Currencies.increaseMoney(player[0].id, values.rateBet * player.length);
+				let winAmount = values.rateBet * player.length;
+				const userData = await Currencies.getData(player[0].id);
+				
+				// Kiểm tra giới hạn thắng cược hàng ngày
+				if (!checkDailyLimits(userData, winAmount, 'games')) {
+					const maxWin = ECONOMY_CONFIG.DAILY_LIMITS.MAX_GAME_EARNINGS - (userData.data?.dailyEarnings?.games || 0);
+					if (maxWin > 0) {
+						winAmount = maxWin;
+						api.sendMessage(`Người thắng đã gần đạt giới hạn thắng cược hôm nay. Phần thưởng được điều chỉnh thành ${winAmount.toLocaleString('vi-VN')}đ.`, threadID);
+					} else {
+						api.sendMessage(`Người thắng đã đạt giới hạn thắng cược hôm nay. Không nhận được thêm tiền.`, threadID);
+						winAmount = 0;
+					}
+				}
+				
+				if (winAmount > 0) {
+					await Currencies.increaseMoney(player[0].id, winAmount);
+					updateDailyEarnings(userData, 'games', winAmount);
+					await Currencies.setData(player[0].id, { data: userData.data });
+				}
 			} catch (e) {};
 			global.moduleData.baicao.delete(threadID);
 			
@@ -138,6 +157,7 @@ module.exports.handleEvent = async ({ Currencies, event, api, Users }) => {
 
 
 module.exports.run = async ({ api, event, args, Currencies }) => {
+	const { checkBettingLimits, checkDailyLimits, updateDailyEarnings, ECONOMY_CONFIG } = require('../../utils/economyConfig.js');
 	var { senderID, threadID, messageID } = event;
   if (args.length == 0) return api.sendMessage({
     body: '[ GAME BÀI CÀO ]\n──────────────────\n🌸 Hướng dẫn cách chơi:\n\n🌸 Tạo bàn: /baicao create\n🌸 Tham gia bàn: /baicao join\n🌸 Bắt đầu chơi: /baicao start\n──────────────────\n🌸 Nhập ( Chia bài ) để chia bài cho các người chơi\n🌸 Nhập ( Đổi bài ) để đổi bài, mỗi người chơi có 2 lượt\n🌸 Nhập ( Ready ) để mở bài\n──────────────────\n🌸 Xem thông tin bàn bài: /baicao info\n🌸 Kiểm tra inbox người chơi: /baicao check\n🌸 Rời bàn bài: /baicao leave',
@@ -157,6 +177,13 @@ module.exports.run = async ({ api, event, args, Currencies }) => {
 		case "-c": {
 			if (global.moduleData.baicao.has(threadID)) return api.sendMessage("⚡ Hiện tại nhóm này đang có bàn bài cào đang được mở!", threadID, messageID);
 			if (!args[1] || isNaN(args[1]) || parseInt(args[1]) <= 1) return api.sendMessage("⚡ Mức đặt cược của bạn không phải là một con số hoặc mức đặt cược của bạn bé hơn 1$", threadID, messageID);
+      
+      // Kiểm tra giới hạn cược
+      const bettingValidation = checkBettingLimits(parseInt(args[1]), money);
+      if (!bettingValidation.isValid) {
+        return api.sendMessage(`⚡ ${bettingValidation.message}`, threadID, messageID);
+      }
+      
       if (money < args[1]) return api.sendMessage(`⚡ Bạn không đủ tiền để có thể khởi tạo bàn với giá: ${args[1]}$`,event.threadID,event.messageID);
       await Currencies.decreaseMoney(event.senderID, Number(args[1]));
 			global.moduleData.baicao.set(event.threadID, { "author": senderID, "start": 0, "chiabai": 0, "ready": 0, player: [ { "id": senderID, "card1": 0, "card2": 0, "card3": 0, "doibai": 2, "ready": false } ], rateBet: Number(args[1])});

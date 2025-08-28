@@ -47,6 +47,9 @@ let s = {
     'nai': 'https://i.imgur.com/UYhUZf8.jpg',
 };
 
+const fs = require("fs-extra");
+const { checkBettingLimits, checkDailyLimits, updateDailyEarnings, ECONOMY_CONFIG } = require('../../utils/economyConfig.js');
+
 exports.run = async o => {
     let {
         args,
@@ -99,6 +102,11 @@ exports.handleEvent = async o => {
         else if (/^[0-9]+%$/.test(bet_money)) bet_money = current_money * Number(bet_money.match(/^[0-9]+/)[0]) / 100;
         else if (unit = Object.entries(units).find($ => RegExp(`^[0-9]+${$[0]}$`).test(bet_money))) bet_money = Number(bet_money.replace(unit[0], '0'.repeat(unit[1])));
         else bet_money = Number(bet_money);
+
+        const bettingValidation = checkBettingLimits(bet_money, current_money);
+        if (!bettingValidation.isValid) {
+            return api.sendMessage(`❎ ${bettingValidation.message}`, threadID, messageID);
+        }
 
         if (isNaN(bet_money)) return send('❎ Tiền cược không hợp lệ!');
         if (bet_money < bet_money_min) return send(`❎ Tiền cược không được thấp hơn ${bet_money_min}$`);
@@ -195,9 +203,28 @@ exports.handleEvent = async o => {
         // Cộng tiền cho người thắng
         for (let winner of winners) {
             try {
-                await o.Currencies.increaseMoney(winner.id, winner.winnings);
+                let winAmount = winner.winnings;
+                const userData = await o.Currencies.getData(winner.id);
+
+                // Check daily earning limits
+                if (!checkDailyLimits(userData, winAmount, 'games')) {
+                    const maxWin = ECONOMY_CONFIG.DAILY_LIMITS.MAX_GAME_EARNINGS - (userData.data?.dailyEarnings?.games || 0);
+                    if (maxWin > 0) {
+                        winAmount = maxWin;
+                        api.sendMessage(`Bạn đã đạt giới hạn thắng cược từ trò chơi hôm nay. Phần thưởng của bạn được điều chỉnh thành ${winAmount.toLocaleString('vi-VN')}đ.`, threadID);
+                    } else {
+                        api.sendMessage(`Bạn đã đạt giới hạn thắng cược từ trò chơi hôm nay. Bạn không nhận được thêm tiền.`, threadID);
+                        winAmount = 0;
+                    }
+                }
+
+                if (winAmount > 0) {
+                    await o.Currencies.increaseMoney(winner.id, winAmount);
+                    updateDailyEarnings(userData, 'games', winAmount);
+                    await o.Currencies.setData(winner.id, { data: userData.data });
+                }
             } catch (err) {
-                console.error(err);
+                console.error(`Lỗi hoàn tiền cho người chơi ${winner.id}:`, err);
             }
         }
 
@@ -267,7 +294,26 @@ exports.handleReaction = async o => {
             // Hoàn tiền cho tất cả người chơi khi huỷ bàn
             for (let player of _.p) {
                 try {
-                    await o.Currencies.increaseMoney(player.id, player.total_bet);
+                    let winAmount = player.total_bet;
+                    const userData = await o.Currencies.getData(player.id);
+
+                    // Check daily earning limits
+                    if (!checkDailyLimits(userData, winAmount, 'games')) {
+                        const maxWin = ECONOMY_CONFIG.DAILY_LIMITS.MAX_GAME_EARNINGS - (userData.data?.dailyEarnings?.games || 0);
+                        if (maxWin > 0) {
+                            winAmount = maxWin;
+                            api.sendMessage(`Bạn đã đạt giới hạn thắng cược từ trò chơi hôm nay. Phần thưởng của bạn được điều chỉnh thành ${winAmount.toLocaleString('vi-VN')}đ.`, threadID);
+                        } else {
+                            api.sendMessage(`Bạn đã đạt giới hạn thắng cược từ trò chơi hôm nay. Bạn không nhận được thêm tiền.`, threadID);
+                            winAmount = 0;
+                        }
+                    }
+
+                    if (winAmount > 0) {
+                        await o.Currencies.increaseMoney(player.id, winAmount);
+                        updateDailyEarnings(userData, 'games', winAmount);
+                        await o.Currencies.setData(player.id, { data: userData.data });
+                    }
                 } catch (err) {
                     console.error(`Lỗi hoàn tiền cho người chơi ${player.id}:`, err);
                 }

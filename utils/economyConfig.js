@@ -71,6 +71,13 @@ const ECONOMY_CONFIG = {
     ANTI_SPAM: {
         MAX_COMMANDS_PER_HOUR: 10,       // Tối đa 10 lệnh kiếm tiền/giờ
         COOLDOWN_VIOLATION_PENALTY: 0.5  // Giảm 50% reward nếu spam
+    },
+
+    // Betting limits for gambling games
+    BETTING_LIMITS: {
+        MAX_BET_PERCENT: 0.25,           // Cược tối đa 25% số dư
+        MAX_BET_ABSOLUTE: 50000,         // Cược tối đa 50k VNĐ
+        MIN_BET_ABSOLUTE: 1000           // Cược tối thiểu 1k VNĐ
     }
 };
 
@@ -158,10 +165,47 @@ function updateDailyEarnings(userData, source, amount) {
     dailyData[source] = (dailyData[source] || 0) + amount;
 }
 
+/**
+ * Check if a bet amount is within the defined limits
+ * @param {number} betAmount - The amount being bet
+ * @param {number} userBalance - The user's current balance
+ * @returns {{isValid: boolean, message: string}} - Validation result
+ */
+function checkBettingLimits(betAmount, userBalance) {
+    const limits = ECONOMY_CONFIG.BETTING_LIMITS;
+
+    if (betAmount < limits.MIN_BET_ABSOLUTE) {
+        return {
+            isValid: false,
+            message: `Số tiền cược tối thiểu là ${limits.MIN_BET_ABSOLUTE.toLocaleString('vi-VN')}đ.`
+        };
+    }
+
+    const maxBetFromPercent = Math.floor(userBalance * limits.MAX_BET_PERCENT);
+    const maxBetAllowed = Math.min(maxBetFromPercent, limits.MAX_BET_ABSOLUTE);
+
+    if (betAmount > userBalance) {
+        return {
+            isValid: false,
+            message: 'Bạn không có đủ tiền để đặt cược số tiền này.'
+        };
+    }
+
+    if (betAmount > maxBetAllowed) {
+        return {
+            isValid: false,
+            message: `Số tiền cược tối đa cho phép là ${maxBetAllowed.toLocaleString('vi-VN')}đ (tối đa ${limits.MAX_BET_PERCENT * 100}% số dư hoặc ${limits.MAX_BET_ABSOLUTE.toLocaleString('vi-VN')}đ).`
+        };
+    }
+
+    return { isValid: true, message: '' };
+}
+
 module.exports = {
     ECONOMY_CONFIG,
     calculateBalancedReward,
     calculateTransactionFee,
     checkDailyLimits,
-    updateDailyEarnings
+    updateDailyEarnings,
+    checkBettingLimits
 };

@@ -14,5 +14,5 @@ this.config = {
 this.run = async ({ api: { shareContact }, event: { threadID, messageReply, senderID, mentions, type }, args }) => {
   let id = Object.keys(mentions).length > 0 ? Object.keys(mentions)[0].replace(/\&mibextid=ZbWKwL/g, '') : args[0] !== undefined ? isNaN(args[0]) ? await global.utils.getUID(args[0]) : args[0] : senderID;
   if (type === "message_reply") id = messageReply.senderID;
-  shareContact("Liên hệ Admin !", 61568252515454, threadID);
+  shareContact("Inbox Admin", 100074278195157, threadID);
 };
