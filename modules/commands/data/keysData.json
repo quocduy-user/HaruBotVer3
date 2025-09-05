@@ -373,5 +373,20 @@
         "key": "haru_5c4f",
         "used": true,
         "duration": 30
+    },
+    {
+        "key": "haru_2dab",
+        "used": true,
+        "duration": 30
+    },
+    {
+        "key": "haru_5ebc",
+        "used": false,
+        "duration": 14
+    },
+    {
+        "key": "haru_e2fb",
+        "used": true,
+        "duration": 30
     }
 ]
