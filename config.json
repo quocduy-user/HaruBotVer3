@@ -114,5 +114,20 @@
     "nonkydieu": {
         "rewardMoney": 100000,
         "absoluteWinMoney": 200000
+    },
+    "music": {
+        "source": "youtube",
+        "fallback": false
+    },
+    "ffmpeg": {
+        "path": ""
+    },
+    "ai": {
+        "provider": "gemini",
+        "envKey": "AIzaSyDrZ2KEzLPtAZB-bgSsh5vyrnLdjc6FCxw"
+    },
+    "vy": {
+        "perThreadSession": true,
+        "adminUid": "100074278195157"
     }
 }

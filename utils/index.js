@@ -1,6 +1,11 @@
 const crypto = require('crypto');
 const os = require("os");
 const axios = require("axios");
+const http = require('http');
+const https = require('https');
+const { writeFileSync, unlinkSync, createWriteStream, createReadStream } = require('fs');
+const { resolve, basename } = require('path');
+const FormData = require('form-data');
 const config = require('../config.json');
 const package = require('../package.json');
 
@@ -50,37 +55,52 @@ module.exports.cleanAnilistHTML = function (text) {
 }
 
 module.exports.downloadFile = async function (url, path) {
-  const { createWriteStream } = require('fs');
-  const axios = require('axios');
-
-  const response = await axios({
-    method: 'GET',
-    responseType: 'stream',
-    url
-  });
-
-  const writer = createWriteStream(path);
-
-  response.data.pipe(writer);
-
-  return new Promise((resolve, reject) => {
-    writer.on('finish', resolve);
-    writer.on('error', reject);
-  });
+  const agents = {
+    httpAgent: new http.Agent({ keepAlive: true }),
+    httpsAgent: new https.Agent({ keepAlive: true })
+  };
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/octet-stream,application/json,text/plain,*/*',
+    'Accept-Encoding': 'gzip, deflate, br'
+  };
+  const maxRetries = 3;
+  let attempt = 0;
+  while (true) {
+    try {
+      const response = await axios({
+        method: 'GET',
+        responseType: 'stream',
+        url,
+        timeout: 20000,
+        maxRedirects: 5,
+        headers,
+        ...agents
+      });
+      const writer = createWriteStream(path);
+      response.data.pipe(writer);
+      await new Promise((resolvePromise, rejectPromise) => {
+        writer.on('finish', resolvePromise);
+        writer.on('error', rejectPromise);
+      });
+      return;
+    } catch (err) {
+      attempt++;
+      if (attempt > maxRetries) throw err;
+      await new Promise(r => setTimeout(r, 1000 * attempt));
+    }
+  }
 };
 
 module.exports.getContent = async function(url) {
   try {
-    const axios = require("axios");
-
-    const response = await axios({
-      method: 'GET',
-      url
-    });
-
-    const data = response;
-
-    return data;
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json,text/html;q=0.9,*/*;q=0.8',
+      'Accept-Encoding': 'gzip, deflate, br'
+    };
+    const response = await axios({ method: 'GET', url, timeout: 15000, maxRedirects: 5, headers });
+    return response;
   } catch (e) { return console.log(e); };
 }
 
@@ -203,10 +223,25 @@ module.exports.removeBackground = async(image) => {
         }
 
 module.exports.streamUrl = async function(url) {
-  const res = await axios({
-    url: url,
-    method: 'GET',
-    responseType: 'stream'
-  });
-  return res.data;
-        }
+  const agents = {
+    httpAgent: new http.Agent({ keepAlive: true }),
+    httpsAgent: new https.Agent({ keepAlive: true })
+  };
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Encoding': 'gzip, deflate, br'
+  };
+  const maxRetries = 3;
+  let attempt = 0;
+  while (true) {
+    try {
+      const res = await axios({ url, method: 'GET', responseType: 'stream', timeout: 20000, maxRedirects: 5, headers, ...agents });
+      return res.data;
+    } catch (err) {
+      attempt++;
+      if (attempt > maxRetries) throw err;
+      await new Promise(r => setTimeout(r, 1000 * attempt));
+    }
+  }
+}

@@ -1,6 +1,7 @@
 //////////////////////////////////////////////////////
 //========= Yêu cầu tất cả các biến cần sử dụng =========//
 /////////////////////////////////////////////////////
+require('dotenv').config();
 const moment = require("moment-timezone");
 const { readdirSync, readFileSync, writeFileSync, existsSync, unlinkSync, rm } = require("fs-extra");
 const { join, resolve } = require("path");
@@ -103,7 +104,7 @@ catch {
 
 try {
     for (const key in configValue) global.config[key] = configValue[key];
-    logger.loader("Đã load thành công Config");
+    logger.loader("Đã load thành công Config!");
 }
 catch { return logger.loader("Can't load file config!", "error") }
 
@@ -180,7 +181,7 @@ function onBot({ models }) {
                                     var check = false;
                                     var isError;
                                    // logger.loader(global.getText('mirai', 'notFoundPackage', reqDependencies, module.config.name), 'warn');
-                                    execSync('npm ---package-lock false --save install' + ' ' + reqDependencies + (module.config.dependencies[reqDependencies] == '*' || module.config.dependencies[reqDependencies] == '' ? '' : '@' + module.config.dependencies[reqDependencies]), { 'stdio': 'inherit', 'env': process['env'], 'shell': true, 'cwd': join(__dirname, 'nodemodules') });
+                                    execSync('npm --package-lock false --save install' + ' ' + reqDependencies + (module.config.dependencies[reqDependencies] == '*' || module.config.dependencies[reqDependencies] == '' ? '' : '@' + module.config.dependencies[reqDependencies]), { 'stdio': 'inherit', 'env': process['env'], 'shell': true, 'cwd': join(__dirname, 'nodemodules') });
                                     for (let i = 1; i <= 3; i++) {
                                         try {
                                             require['cache'] = {};
@@ -245,11 +246,11 @@ function onBot({ models }) {
                                     let check = false;
                                     let isError;
                                    // logger.loader(global.getText('mirai', 'notFoundPackage', dependency, event.config.name), 'warn');
-                                    execSync('npm --package-lock false --save install' + dependency + (event.config.dependencies[dependency] == '*' || event.config.dependencies[dependency] == '' ? '' : '@' + event.config.dependencies[dependency]), { 'stdio': 'inherit', 'env': process['env'], 'shell': true, 'cwd': join(__dirname, 'nodemodules') });
+                                    execSync('npm --package-lock false --save install ' + dependency + (event.config.dependencies[dependency] == '*' || event.config.dependencies[dependency] == '' ? '' : '@' + event.config.dependencies[dependency]), { 'stdio': 'inherit', 'env': process['env'], 'shell': true, 'cwd': join(__dirname, 'nodemodules') });
                                     for (let i = 1; i <= 3; i++) {
                                         try {
                                             require['cache'] = {};
-                                            if (global.nodemodule.includes(dependency)) break;
+                                            if (Object.prototype.hasOwnProperty.call(global.nodemodule, dependency)) break;
                                             if (listPackage.hasOwnProperty(dependency) || listbuiltinModules.includes(dependency)) global.nodemodule[dependency] = require(dependency);
                                             else global.nodemodule[dependency] = require(_0x21abed);
                                             check = true;
@@ -298,10 +299,10 @@ function onBot({ models }) {
         const listener = require('./gojo/listen.js')(listenerData);
                  async function refreshFb_dtsg() {
         try {
-            await api.refreshFb_dtsg();
+            await loginApiData.refreshFb_dtsg();
             console.log('Reset fb_dtsg thành công!');
         } catch (err) {
-            logger("error", "Đã xảy ra lỗi khi làm mới fb_dtsg và jazoest", error);
+            logger("error", "Đã xảy ra lỗi khi làm mới fb_dtsg và jazoest", err);
         }
     }
                 function listenerCallback(error, message) {
@@ -312,6 +313,11 @@ function onBot({ models }) {
 
         global.handleListen = loginApiData.listenMqtt(listenerCallback);
         global.client.api = loginApiData;
+        // Lên lịch làm mới fb_dtsg định kỳ (mặc định 30 phút)
+        const REFRESH_INTERVAL_MS = (process.env.FB_DTSG_REFRESH_MINUTES ? Number(process.env.FB_DTSG_REFRESH_MINUTES) : 30) * 60 * 1000;
+        setInterval(() => {
+            refreshFb_dtsg().catch(() => {});
+        }, REFRESH_INTERVAL_MS);
         
         // Hiển thị thông tin memory sau khi FCA load xong
         const startMem = getMemoryInfo();
@@ -348,4 +354,23 @@ process.on('unhandledRejection', (err, p) => {
 })
 .on('uncaughtException', err => { 
   console.error("Uncaught Exception:", err);
-});;
+})
+// Đóng bot gọn gàng khi nhận tín hiệu dừng
+.on('SIGINT', async () => {
+  try {
+    if (global.handleListen && typeof global.handleListen === 'function') {
+      global.handleListen();
+    }
+  } catch {}
+  console.log('Nhận SIGINT, đang thoát...');
+  process.exit(0);
+})
+.on('SIGTERM', async () => {
+  try {
+    if (global.handleListen && typeof global.handleListen === 'function') {
+      global.handleListen();
+    }
+  } catch {}
+  console.log('Nhận SIGTERM, đang thoát...');
+  process.exit(0);
+});

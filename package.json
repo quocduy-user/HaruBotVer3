@@ -16,6 +16,7 @@
     "license": "GPL-3.0",
     "dependencies": {
         "@distube/ytdl-core": "^4.16.12",
+        "@ffmpeg-installer/ffmpeg": "^1.1.0",
         "@google/generative-ai": "^0.24.1",
         "aes-js": "^3.1.2",
         "ansi-to-html": "^0.7.2",

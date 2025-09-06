@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require("axios");
-const { checkBettingLimits, checkDailyLimits, updateDailyEarnings } = require('../../utils/economyConfig.js');
+const { ECONOMY_CONFIG, checkBettingLimits, checkDailyLimits, updateDailyEarnings } = require('../../utils/economyConfig.js');
 
 module.exports.config = {
   name: "taixiu",
@@ -80,20 +80,17 @@ module.exports.run = async function({ api, event, args, Users, Threads, Currenci
 
       setTimeout(async () => {
         if (!global.client.taixiu_ca[threadID]?.data) return;
-        let total = 0;
-        let msg = 'Thông tin';
-        
+        // Auto-cancel table after 4 minutes if not rolled; refund all bets exactly, do not charge host
+        const refunds = [];
         for (const id in global.client.taixiu_ca[threadID].data) {
-          const name = await Users.getNameUser(id) || "Player";
+          const name = (await Users.getNameUser(id)) || "Player";
           const playerBet = global.client.taixiu_ca[threadID].data[id].bet;
-          await Currencies.increaseMoney(id, playerBet * 2);
-          msg += `\n👤 ${name}: ${playerBet * 2}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + " VND";
-          total += playerBet;
+          await Currencies.increaseMoney(id, playerBet);
+          refunds.push(`👤 ${name}: +${playerBet.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} VND`);
         }
-        
-        await Currencies.decreaseMoney(global.client.taixiu_ca[threadID].author, total);
-        msg += "\n\nChủ bàn đã bị trừ " + total.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",") + " VND";
-        api.sendMessage(msg, threadID);
+        if (refunds.length > 0) {
+          api.sendMessage(`⏳ Bàn tài xỉu đã tự động hủy do quá thời gian.\n💸 Hoàn tiền:\n${refunds.join('\n')}`, threadID);
+        }
         delete global.client.taixiu_ca[threadID];
       }, 240000);
       return;
@@ -116,7 +113,7 @@ module.exports.run = async function({ api, event, args, Users, Threads, Currenci
     }
 
     case "end": {
-      if (!global.client.taixiu_ca[threadID]?.author === senderID)
+      if (global.client.taixiu_ca[threadID]?.author !== senderID)
         return send("❎ Bạn không phải chủ phòng!");
 
       delete global.client.taixiu_ca[threadID];
@@ -271,9 +268,11 @@ module.exports.handleEvent = async function ({ api, event, args, Currencies, Use
       const gameResult = totalDice > 10 ? 'tài' : 'xỉu';
       const tai = [], xiu = [], winners = [];
       
-      // Load/initialize jackpot data
-      const jackpotPath = path.join(__dirname, 'game', 'taixiu_jackpot.json');
-      const historyPath = path.join(__dirname, 'game', 'taixiu_history.json');
+      // Ensure game directory exists and load/initialize jackpot data
+      const gameDir = path.join(__dirname, 'game');
+      if (!fs.existsSync(gameDir)) fs.mkdirSync(gameDir, { recursive: true });
+      const jackpotPath = path.join(gameDir, 'taixiu_jackpot.json');
+      const historyPath = path.join(gameDir, 'taixiu_history.json');
       
       let jackpotInfo = { amount: 10000, lastWin: null };
       if (fs.existsSync(jackpotPath)) {
@@ -401,21 +400,63 @@ module.exports.handleReaction = async function({ api, event, handleReaction, Cur
   if (reaction != "❤") return;
   if (userID != handleReaction.author) return;
 
-  const { senderID, messageID, moneyBet, betChoice } = handleReaction;
-  const moneyUser = (await Currencies.getData(senderID)).money;
+  const { messageID } = handleReaction;
 
-  if (moneyBet > moneyUser) 
-    return api.sendMessage("Số tiền đặt lớn hơn số dư!", threadID, messageID);
+  // Support different reaction types: confirm bet change, quick create
+  switch (handleReaction.type) {
+    case 'confirm': {
+      const { betChoice, moneyBet } = handleReaction;
+      if (!global.client.taixiu_ca[threadID]?.play || global.client.taixiu_ca[threadID].status !== 'pending') {
+        return api.sendMessage("❎ Bàn đã kết thúc hoặc không còn ở trạng thái chờ.", threadID, messageID);
+      }
 
-  await Currencies.decreaseMoney(senderID, moneyBet);
-  global.client.taixiu_ca[threadID].data[senderID] = { 
-    name: betChoice, 
-    bet: moneyBet 
-  };
-  
-  return api.sendMessage(
-    `Đặt cược thành công!\nLựa chọn: ${betChoice}\nSố tiền: ${moneyBet.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} VND`,
-    threadID,
-    messageID
-  );
+      // Ensure same user
+      const balance = (await Currencies.getData(userID)).money;
+      if (moneyBet > balance) {
+        return api.sendMessage("❎ Số tiền đặt lớn hơn số dư!", threadID, messageID);
+      }
+
+      // Refund previous bet if any
+      const prev = global.client.taixiu_ca[threadID].data[userID];
+      if (prev?.bet) {
+        await Currencies.increaseMoney(userID, prev.bet);
+      }
+
+      // Deduct new bet and save
+      await Currencies.decreaseMoney(userID, moneyBet);
+      global.client.taixiu_ca[threadID].data[userID] = {
+        name: betChoice,
+        bet: moneyBet
+      };
+
+      return api.sendMessage(
+        `✅ Đã cập nhật cược!\nLựa chọn: ${betChoice}\nSố tiền: ${moneyBet.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} VND`,
+        threadID,
+        messageID
+      );
+    }
+    case 'create': {
+      // Quick create: allow bypass cooldown with 10% fee if balance >= 1,000,000
+      const balance = (await Currencies.getData(userID)).money;
+      if (balance < 1000000) {
+        return api.sendMessage("❎ Bạn cần số dư tối thiểu 1,000,000 VND để tạo bàn nhanh.", threadID, messageID);
+      }
+      const fee = Math.floor(balance * 0.10);
+      await Currencies.decreaseMoney(userID, fee);
+      global.client.taixiu_ca[threadID] = {
+        players: 0,
+        data: {},
+        play: true,
+        status: 'pending',
+        author: userID
+      };
+      return api.sendMessage(
+        `✅ Đã tạo bàn tài xỉu nhanh!\n💸 Phí: ${fee.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")} VND\n📌 Gõ: tài/xỉu + số tiền`,
+        threadID,
+        messageID
+      );
+    }
+    default:
+      return;
+  }
 };

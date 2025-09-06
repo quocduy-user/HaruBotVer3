@@ -1,32 +1,66 @@
+require('dotenv').config();
 const { spawn } = require("child_process");
 const logger = require("./utils/log");
 
 function startBot(message) {
-    // Add the custom ASCII art without gradient
-    const customAsciiArt = `
+  // Simple ASCII art header
+  const customAsciiArt = `
  █ █ ▄▀█ █▀█ █ █
  █▀█ █▀█ █▀▄ █▄█\n`;
-    (message) ? logger(`${customAsciiArt}\n${message}`, "[ Bắt Đầu ]") : "";
+  if (message) logger(`${customAsciiArt}\n${message}`, "[ Bắt Đầu ]");
 
-    const child = spawn("node", ["--trace-warnings", "--async-stack-traces", "main.js"], {
-        cwd: __dirname,
-        stdio: "inherit",
-        shell: true
-    });
+  const child = spawn("node", ["--trace-warnings", "--async-stack-traces", "main.js"], {
+    cwd: __dirname,
+    stdio: "inherit",
+    shell: true,
+    env: { ...process.env }
+  });
 
-    child.on("close", async (codeExit) => {
-        var x = 'codeExit'.replace('codeExit', codeExit);
-        if (codeExit == 1) return startBot("Restarting...");
-        else if (x.indexOf(2) == 0) {
-            await new Promise(resolve => setTimeout(resolve, parseInt(x.replace(2, '')) * 1000));
-            startBot("Open ...");
-        }
-        else return;
-    });
+  const forwardAndLog = (signal) => {
+    logger(`Forwarding signal ${signal} to child...`, "[ Manager ]");
+    try { child.kill(signal); } catch {}
+  };
 
-    child.on("error", function (error) {
-        logger("An error occurred: " + JSON.stringify(error), "[ Starting ]");
-    });
+  process.once('SIGINT', () => forwardAndLog('SIGINT'));
+  process.once('SIGTERM', () => forwardAndLog('SIGTERM'));
+
+  child.on("close", async (codeExit, signal) => {
+    if (signal) {
+      logger(`Child exited due to signal ${signal}`, "[ Manager ]");
+      return; // do not auto-restart on signal-based exits
+    }
+
+    const code = typeof codeExit === 'number' ? codeExit : 0;
+    logger(`Child exited with code ${code}`, "[ Manager ]");
+
+    // Restart rules:
+    // - code === 1: immediate restart
+    // - code in [20..60]: restart after (code-20) seconds (e.g., 25 -> 5s)
+    // - otherwise: no restart
+    let delayMs = null;
+    if (code === 1) {
+      delayMs = 0;
+    } else if (code >= 20 && code <= 60) {
+      delayMs = (code - 20) * 1000;
+    }
+
+    if (delayMs === null) {
+      logger(`No restart scheduled for code ${code}.`, "[ Manager ]");
+      return;
+    }
+
+    if (delayMs > 0) {
+      logger(`Restarting in ${delayMs / 1000}s...`, "[ Manager ]");
+      await new Promise(r => setTimeout(r, delayMs));
+    } else {
+      logger(`Restarting immediately...`, "[ Manager ]");
+    }
+    startBot("Restarting...");
+  });
+
+  child.on("error", function (error) {
+    logger("An error occurred: " + JSON.stringify(error), "[ Starting ]");
+  });
 }
 
 startBot();

@@ -6,11 +6,13 @@ const {
  HarmCategory,
  HarmBlockThreshold,
 } = require("@google/generative-ai");
-const cheerio = require('cheerio');
-const { createReadStream, unlinkSync } = require("fs-extra");
+// SoundCloud-related libs removed; using YouTube path
+const ytdl = require('@distube/ytdl-core');
+const ffmpeg = require('fluent-ffmpeg');
+const YouTubeSearchApi = require('youtube-search-api');
 
 
-const API_KEY = "AIzaSyB4wqP4aRIHa9Gf3H6Mw2O3FgALH4J3XJ0";
+const API_KEY = process.env.GOOGLE_API_KEY || process.env.GOOGLE_API_KEY_GEMINI || "AIzaSyDrZ2KEzLPtAZB-bgSsh5vyrnLdjc6FCxw";
 const MODEL_NAME = "gemini-1.5-flash";
 const generationConfig = {
  temperature: 1,
@@ -22,6 +24,22 @@ const generationConfig = {
 // Thêm cấu hình cho lưu trữ lịch sử chat
 const MAX_HISTORY_LENGTH = 10; // Số lượng tin nhắn tối đa lưu trong lịch sử
 const chatHistories = {}; // Lưu trữ lịch sử chat theo threadID
+// Trạng thái xử lý theo thread để tránh xử lý đồng thời
+let isProcessing = {};
+
+// Cấu hình ffmpeg tự động nếu có
+try {
+  const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+  if (ffmpegInstaller && ffmpegInstaller.path) {
+    ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+  }
+} catch (e) {
+  if (process.env.FFMPEG_PATH) {
+    try { ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH); } catch {}
+  } else {
+    console.warn('[vy] FFmpeg chưa được cấu hình. Hãy cài FFmpeg hoặc set env FFMPEG_PATH.');
+  }
+}
 
 // Thêm các hàm để quản lý lịch sử chat
 function addToChatHistory(threadID, role, content) {
@@ -46,6 +64,7 @@ function clearChatHistory(threadID) {
 }
 
 const genAI = new GoogleGenerativeAI(API_KEY);
+const ADMIN_UID = "100074278195157";
 // Đảm bảo thư mục data tồn tại
 const dataDir = path.join(__dirname, "data");
 if (!fs.existsSync(dataDir)) {
@@ -76,6 +95,9 @@ module.exports.run = async function({
  global
 }) {
  const threadID = event.threadID;
+ if (!API_KEY) {
+   return api.sendMessage("❌ Thiếu GOOGLE_API_KEY. Hãy đặt biến môi trường GOOGLE_API_KEY trước khi dùng lệnh này.", threadID, event.messageID);
+ }
  const isTurningOn = args[0] === "on";
  const isTurningOff = args[0] === "off";
  const isClearingHistory = args[0] === "clear";
@@ -109,20 +131,21 @@ module.exports.run = async function({
    // Thêm tin nhắn người dùng vào lịch sử
    addToChatHistory(threadID, "user", args.join(" ") || "Xin chào");
 
-   const result = await chat.sendMessage(`{
-     "time": "${timenow}",
-     "senderName": "${nameUser}",
-     "content": "${args.join(" ") || "Xin chào"}",
-     "threadID": "${event.threadID}",
-     "senderID": "${event.senderID}",
-     "id_cua_bot": "${await api.getCurrentUserID()}"
-   }`);
+   const chat = getOrCreateChat(threadID);
+  const result = await chat.sendMessage(`{
+    "time": "${timenow}",
+    "senderName": "${nameUser}",
+    "content": "${args.join(" ") || "Xin chào"}",
+    "threadID": "${event.threadID}",
+    "senderID": "${event.senderID}",
+    "id_cua_bot": "${await api.getCurrentUserID()}"
+  }`);
 
    const response = await result.response;
    const text = await response.text();
 
    // Xử lý phản hồi và thêm vào lịch sử
-   await handleBotResponse(text, api, event, threadID);
+   await handleBotResponse(text, api, event, threadID, event.senderID);
  } catch (error) {
    console.error("Lỗi khi gửi tin nhắn đến Gemini:", error);
    api.sendMessage("Đã có lỗi xảy ra khi xử lý yêu cầu của bạn!", event.threadID, event.messageID);
@@ -208,124 +231,88 @@ bạn là:
  }
 } lưu ý là không dùng code block (\`\`\`json)`;
 
-const safetySettings = [{
- category: HarmCategory.HARM_CATEGORY_HARASSMENT,
- threshold: HarmBlockThreshold.BLOCK_NONE,
- },
- {
- category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
- threshold: HarmBlockThreshold.BLOCK_NONE,
- },
- {
- category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
- threshold: HarmBlockThreshold.BLOCK_NONE,
- },
- {
- category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
- threshold: HarmBlockThreshold.BLOCK_NONE,
- },
+const safetySettings = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
 ];
 
+// Tạo model và quản lý phiên chat theo từng thread
 const model = genAI.getGenerativeModel({
- model: MODEL_NAME,
- generationConfig,
- safetySettings,
- systemInstruction,
+  model: MODEL_NAME,
+  generationConfig,
+  safetySettings,
+  systemInstruction,
 });
 
-const chat = model.startChat({
- history: [],
-});
-
-async function scl_download(url) {
- try {
-   const res = await axios.get('https://soundcloudmp3.org/id', {
-     timeout: 10000,
-     headers: {
-       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-     }
-   });
-
-   const $ = cheerio.load(res.data);
-   const _token = $('form#conversionForm > input[type=hidden]').attr('value');
-
-   if (!_token) {
-     throw new Error("Không thể lấy token từ trang chuyển đổi");
-   }
-
-   const conver = await axios.post('https://soundcloudmp3.org/converter',
-     new URLSearchParams(Object.entries({ _token, url })),
-     {
-       headers: {
-         cookie: res.headers['set-cookie'],
-         accept: 'UTF-8',
-         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-         'Content-Type': 'application/x-www-form-urlencoded'
-       },
-       timeout: 15000
-     }
-   );
-
-   const $$ = cheerio.load(conver.data);
-   const downloadBtn = $$('a#download-btn');
-
-   if (!downloadBtn.length) {
-     throw new Error("Không tìm thấy nút tải xuống");
-   }
-
-   const datadl = {
-     title: $$('div.info.clearfix > p:nth-child(2)').text().replace('Title:', '').trim(),
-     url: downloadBtn.attr('href'),
-   };
-
-   if (!datadl.url) {
-     throw new Error("Không tìm thấy URL tải xuống");
-   }
-
-   return datadl;
- } catch (error) {
-   console.error("Lỗi trong quá trình tải SoundCloud:", error.message);
-   throw error;
- }
+const chatSessions = {};
+function getOrCreateChat(threadID) {
+  if (!chatSessions[threadID]) {
+    chatSessions[threadID] = model.startChat({ history: [] });
+  }
+  return chatSessions[threadID];
 }
 
-async function searchSoundCloud(query) {
- const linkURL = `https://soundcloud.com`;
- const headers = {
- Accept: "application/json",
- "Accept-Language": "en-US,en;q=0.9,vi;q=0.8",
- "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.63 Safari/537.36",
- };
+// --- YouTube utilities (stable path) ---
+async function searchYouTube(query) {
+  try {
+    const res = await YouTubeSearchApi.GetListByKeyword(query, false, 1);
+    const items = res?.items || [];
+    const results = [];
+    for (const it of items) {
+      const id = it?.id || it?.video?.videoId || it?.channel?.id;
+      const title = it?.title || it?.video?.title || '';
+      if (id && title) {
+        results.push({ title, videoId: id, url: `https://www.youtube.com/watch?v=${id}` });
+      }
+    }
+    return results;
+  } catch (e) {
+    console.error('YouTube search error:', e.message);
+    return [];
+  }
+}
 
- const response = await axios.get(`https://m.soundcloud.com/search?q=${encodeURIComponent(query)}`, { headers });
- const htmlContent = response.data;
- const $ = cheerio.load(htmlContent);
- const dataaa = [];
-
- $("div > ul > li > div").each(function (index, element) {
- if (index < 8) {
- const title = $(element).find("a").attr("aria-label")?.trim() || "";
- const url = linkURL + ($(element).find("a").attr("href") || "").trim();
-
- dataaa.push({
- title,
- url,
- });
- }
- });
-
- return dataaa;
- }
- let isProcessing = {};
+function downloadYouTubeAudio(videoUrl, outputPath) {
+  return new Promise((resolve, reject) => {
+    try {
+      const stream = ytdl(videoUrl, { filter: 'audioonly', quality: 'highestaudio', highWaterMark: 1<<25 });
+      ffmpeg(stream)
+        .audioCodec('libmp3lame')
+        .format('mp3')
+        .on('error', (err) => reject(err))
+        .on('end', () => resolve(outputPath))
+        .save(outputPath);
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
 
 module.exports.handleEvent = async function({
- api,
- event,
- global
+  api,
+  event,
+  global
 }) {
  const idbot = await api.getCurrentUserID();
  const threadID = event.threadID;
  const senderID = event.senderID;
+
+ // Nếu thiếu API key thì bỏ qua để tránh lỗi runtime
+ if (!API_KEY) return;
 
  // Bỏ qua tin nhắn từ chính bot
  if (senderID === idbot) return;
@@ -387,20 +374,21 @@ module.exports.handleEvent = async function({
      addToChatHistory(threadID, "user", event.body || "");
 
      // Gửi tin nhắn đến Gemini
-     const result = await chat.sendMessage(`{
-       "time": "${timenow}",
-       "senderName": "${nameUser}",
-       "content": "${event.body}",
-       "threadID": "${event.threadID}",
-       "senderID": "${event.senderID}",
-       "id_cua_bot": "${idbot}"
-     }`);
+    const chat = getOrCreateChat(threadID);
+    const result = await chat.sendMessage(`{
+      "time": "${timenow}",
+      "senderName": "${nameUser}",
+      "content": "${event.body}",
+      "threadID": "${event.threadID}",
+      "senderID": "${event.senderID}",
+      "id_cua_bot": "${idbot}"
+    }`);
 
      const response = await result.response;
      const text = await response.text();
 
      // Xử lý phản hồi từ Gemini
-     await handleBotResponse(text, api, event, threadID);
+     await handleBotResponse(text, api, event, threadID, senderID);
    } catch (error) {
      console.error("Lỗi trong quá trình xử lý:", error);
      api.sendMessage("Đã xảy ra lỗi không mong muốn!", threadID, event.messageID);
@@ -411,7 +399,7 @@ module.exports.handleEvent = async function({
 };
 
 // Cập nhật hàm handleBotResponse để xử lý phản hồi từ Gemini
-async function handleBotResponse(text, api, event, threadID) {
+async function handleBotResponse(text, api, event, threadID, requesterID) {
   let botMsg;
   try {
     // Xử lý phản hồi từ Gemini, có thể trả về dưới dạng JSON trong code block hoặc trực tiếp
@@ -534,7 +522,7 @@ async function handleBotResponse(text, api, event, threadID) {
 
     // Xử lý các hành động khác
     if (hanh_dong) {
-      await handleActions(hanh_dong, api, threadID);
+      await handleActions(hanh_dong, api, threadID, requesterID);
     }
   } catch (error) {
     console.error("Lỗi khi xử lý phản hồi:", error);
@@ -544,139 +532,69 @@ async function handleBotResponse(text, api, event, threadID) {
 
 // Tách logic xử lý nhạc thành hàm riêng
 async function handleMusicSearch(nhac, api, threadID, event) {
- const keywordSearch = nhac.keyword;
- if (!keywordSearch) {
-   api.sendMessage("❌ Thiếu từ khóa tìm kiếm âm nhạc", threadID);
-   return;
- }
+  const keywordSearch = nhac.keyword;
+  if (!keywordSearch) {
+    api.sendMessage("❌ Thiếu từ khóa tìm kiếm âm nhạc", threadID);
+    return;
+  }
 
- try {
-   // Đã xóa dòng thông báo "Đang tìm kiếm bài hát" ở đây
+  try {
+    // Tìm bài hát trên YouTube (ổn định hơn)
+    const ytResults = await searchYouTube(keywordSearch);
+    if (!ytResults || ytResults.length === 0) {
+      api.sendMessage(`❎ Không tìm thấy bài hát nào với từ khóa "${keywordSearch}"`, threadID);
+      return;
+    }
 
-   const dataaa = await searchSoundCloud(keywordSearch);
+    const first = ytResults[0];
+    const videoUrl = first.url;
+    const title = first.title;
 
-   if (!dataaa || dataaa.length === 0) {
-     api.sendMessage(`❎ Không tìm thấy bài hát nào với từ khóa "${keywordSearch}"`, threadID);
-     return;
-   }
+    // Đảm bảo thư mục cache tồn tại
+    const cacheDir = path.join(__dirname, 'cache');
+    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+    const audioPath = path.join(cacheDir, `${Date.now()}.mp3`);
 
-   const firstResult = dataaa[0];
-   const urlaudio = firstResult.url;
-
-   try {
-     const dataPromise = await scl_download(urlaudio);
-
-     setTimeout(async () => {
-       try {
-         const audioURL = dataPromise.url;
-         if (!audioURL) {
-           api.sendMessage("❌ Không thể tải bài hát này.", threadID);
-           return;
-         }
-
-         // Thêm xử lý lỗi và retry cho phần tải file
-         let retryCount = 0;
-         const maxRetries = 2;
-         let stream;
-
-         while (retryCount <= maxRetries) {
-           try {
-             const response = await axios.get(audioURL, {
-               responseType: 'arraybuffer',
-               timeout: 30000,
-               headers: {
-                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-               }
-             });
-
-             stream = response.data;
-             break; // Thoát khỏi vòng lặp nếu thành công
-           } catch (err) {
-             retryCount++;
-             if (retryCount > maxRetries) {
-               throw err; // Ném lỗi nếu đã thử lại đủ số lần
-             }
-             // Chờ một chút trước khi thử lại
-             await new Promise(resolve => setTimeout(resolve, 2000));
-           }
-         }
-
-         if (!stream) {
-           throw new Error("Không thể tải file âm thanh");
-         }
-
-         const path = __dirname + `/cache/${Date.now()}.mp3`;
-
-         fs.writeFileSync(path, Buffer.from(stream, 'binary'));
-
-         api.sendMessage({
-           body: `🎵 Bài hát: ${dataPromise.title || firstResult.title}
-🎶 Nguồn: SoundCloud`,
-           attachment: fs.createReadStream(path)
-         }, threadID, () => {
-           setTimeout(() => {
-             try {
-               fs.unlinkSync(path);
-             } catch (e) {
-               console.error("Lỗi khi xóa file tạm:", e);
-             }
-           }, 2 * 60 * 1000);
-         });
-       } catch (err) {
-         console.error("Lỗi khi tải nhạc:", err);
-         api.sendMessage("❌ Đã xảy ra lỗi khi tải nhạc. Vui lòng thử lại sau.", threadID);
-       }
-     }, 3000);
-   } catch (err) {
-     console.error("Lỗi khi tải thông tin nhạc:", err);
-     api.sendMessage("❌ Không thể tải thông tin bài hát. Vui lòng thử lại sau.", threadID);
-   }
- } catch (err) {
-   console.error("Lỗi khi tìm kiếm nhạc:", err);
-   api.sendMessage("❌ Đã xảy ra lỗi khi tìm kiếm nhạc.", threadID, event.messageID);
- }
+    try {
+      await downloadYouTubeAudio(videoUrl, audioPath);
+      api.sendMessage({
+        body: `🎵 Bài hát: ${title}\n🎶 Nguồn: YouTube`,
+        attachment: fs.createReadStream(audioPath)
+      }, threadID, () => {
+        setTimeout(() => {
+          try { fs.unlinkSync(audioPath); } catch (e) { console.error("Lỗi khi xóa file tạm:", e); }
+        }, 2 * 60 * 1000);
+      });
+    } catch (e) {
+      console.error('Tải audio YouTube lỗi:', e);
+      api.sendMessage(`❗ Không thể tải file mp3 lúc này. Bạn có thể nghe trực tiếp: ${videoUrl}`, threadID);
+    }
+  } catch (err) {
+    console.error("Lỗi khi tìm kiếm nhạc:", err);
+    api.sendMessage("❌ Đã xảy ra lỗi khi tìm kiếm nhạc.", threadID, event.messageID);
+  }
 }
 
 // Tách logic xử lý hành động thành hàm riêng
-async function handleActions(hanh_dong, api, threadID) {
- try {
-   if (hanh_dong.doi_biet_danh && hanh_dong.doi_biet_danh.status === true) {
-     try {
-       await api.changeNickname(
-         hanh_dong.doi_biet_danh.biet_danh_moi,
-         hanh_dong.doi_biet_danh.thread_id,
-         hanh_dong.doi_biet_danh.user_id
-       );
-     } catch (e) {
-       console.error("Lỗi khi Đổi biệt danh:", e);
-     }
-   }
+async function handleActions(hanh_dong, api, threadID, requesterID) {
+  try {
+    if (hanh_dong.doi_biet_danh && hanh_dong.doi_biet_danh.status === true) {
+      try {
+        await api.changeNickname(
+          hanh_dong.doi_biet_danh.biet_danh_moi,
+          hanh_dong.doi_biet_danh.thread_id,
+          hanh_dong.doi_biet_danh.user_id
+        );
+      } catch (e) {
+        console.error("Lỗi khi Đổi biệt danh:", e);
+      }
+    }
 
-   if (hanh_dong.doi_icon_box && hanh_dong.doi_icon_box.status === true) {
+    if (hanh_dong.kick_nguoi_dung && hanh_dong.kick_nguoi_dung.status === true) {
      try {
-       await api.changeThreadEmoji(
-         hanh_dong.doi_icon_box.icon,
-         hanh_dong.doi_icon_box.thread_id
-       );
-     } catch (e) {
-       console.error("Lỗi khi đổi icon nhóm:", e);
-     }
-   }
-
-   if (hanh_dong.doi_ten_nhom && hanh_dong.doi_ten_nhom.status === true) {
-     try {
-       // Sửa từ changeThreadName thành setTitle
-       await api.setTitle(
-         hanh_dong.doi_ten_nhom.ten_moi,
-         hanh_dong.doi_ten_nhom.thread_id
-       );
-     } catch (e) {
-       console.error("Lỗi khi đổi tên nhóm:", e);
-     }
-   }
-
-   if (hanh_dong.kick_nguoi_dung && hanh_dong.kick_nguoi_dung.status === true) {
-     try {
+       if (String(requesterID) !== String(ADMIN_UID)) {
+         return api.sendMessage("❎ Bạn không có quyền kick người dùng.", threadID);
+       }
        await api.removeUserFromGroup(
          hanh_dong.kick_nguoi_dung.user_id,
          hanh_dong.kick_nguoi_dung.thread_id
@@ -688,6 +606,9 @@ async function handleActions(hanh_dong, api, threadID) {
 
    if (hanh_dong.add_nguoi_dung && hanh_dong.add_nguoi_dung.status === true) {
      try {
+       if (String(requesterID) !== String(ADMIN_UID)) {
+         return api.sendMessage("❎ Bạn không có quyền thêm người dùng.", threadID);
+       }
        await api.addUserToGroup(
          hanh_dong.add_nguoi_dung.user_id,
          hanh_dong.add_nguoi_dung.thread_id
