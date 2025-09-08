@@ -1,0 +1,16 @@
+[
+    {
+        "id": "c98be482-65e6-45a3-9d68-250040afeca5",
+        "action": "RENTAL_EXTENDED",
+        "details": {
+            "thread": "29636090796034658",
+            "oldEndDate": "22/08/2025",
+            "newEndDate": "08/10/2025",
+            "days": 30,
+            "extendedBy": "100074278195157",
+            "wasExpired": true
+        },
+        "timestamp": 1757332879143,
+        "time": "08/09/2025 19:01:19"
+    }
+]

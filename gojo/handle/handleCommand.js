@@ -40,10 +40,53 @@ module.exports = function ({ api, models, Users, Threads, Currencies }) {
      if(typeof body === 'string' && body.startsWith(prefixbox) && !NDH.includes(senderID) && !ADMINBOT.includes(senderID) && adminbot.ndhOnly == true) {return api.sendMessage(`⚠️ Chỉ người hỗ trợ bot mới có thể sử dụng bot!`, threadID, messageID);
    }
 
-    const dataAdbox = require('./../../modules/commands/data/dataAdbox.json');
-    var threadInf = (threadInfo.get(threadID) || await Threads.getInfo(threadID));
-    const findd = threadInf.adminIDs.find(el => el.id == senderID);
-    if(typeof body === 'string' && body.startsWith(prefixbox) && dataAdbox.adminbox.hasOwnProperty(threadID) && dataAdbox.adminbox[threadID] == true && !NDH.includes(senderID) && !ADMINBOT.includes(senderID) && !findd && event.isGroup == true ) return api.sendMessage(`⚠️ Chỉ quản trị viên nhóm mới có thể sử dụng bot!`, event.threadID, event.messageID);
+   // QTV Only check - sử dụng file mới qtvonly_data.json
+   let qtvOnlyData = {};
+   try {
+       const qtvOnlyPath = require('path').resolve(__dirname, './../../modules/commands/cache/qtvonly_data.json');
+       if (require('fs').existsSync(qtvOnlyPath)) {
+           // Clear require cache để đảm bảo dữ liệu luôn mới nhất
+           delete require.cache[require.resolve(qtvOnlyPath)];
+           qtvOnlyData = require(qtvOnlyPath);
+           
+           // Debug: Log data loading
+           console.log('[QTVONLY] Data loaded successfully, adminbox entries:', Object.keys(qtvOnlyData.adminbox || {}).length);
+       } else {
+           console.log('[QTVONLY] Data file not found:', qtvOnlyPath);
+       }
+   } catch (error) {
+       console.error('[HANDLECOMMAND] Error loading qtvonly data:', error.message);
+   }
+   
+   var threadInf = (threadInfo.get(threadID) || await Threads.getInfo(threadID));
+   const findd = threadInf.adminIDs.find(el => el.id == senderID);
+   
+   // Kiểm tra QTV Only với dữ liệu mới - Fix string comparison
+   const threadIDStr = String(threadID);
+   const senderIDStr = String(senderID);
+   const isQTVEnabled = qtvOnlyData.adminbox && qtvOnlyData.adminbox[threadIDStr] === true;
+   const isUserAdmin = NDH.includes(senderIDStr) || ADMINBOT.includes(senderIDStr);
+   const isGroupAdmin = findd ? true : false;
+   
+   // Debug logging để kiểm tra
+   if(typeof body === 'string' && body.startsWith(prefixbox)) {
+       console.log('[QTVONLY DEBUG]', {
+           threadID: threadIDStr,
+           senderID: senderIDStr,
+           isQTVEnabled: isQTVEnabled,
+           isUserAdmin: isUserAdmin,
+           isGroupAdmin: isGroupAdmin,
+           shouldBlock: isQTVEnabled && !isUserAdmin && !isGroupAdmin && event.isGroup,
+           body: body.substring(0, 20),
+           adminboxKeys: Object.keys(qtvOnlyData.adminbox || {}).slice(0, 3)
+       });
+   }
+   
+   if(typeof body === 'string' && body.startsWith(prefixbox) && 
+      isQTVEnabled && !isUserAdmin && !isGroupAdmin && event.isGroup == true) {
+       
+       return api.sendMessage(`🔒 **Chế độ QTV Only đang bật!**\n\n⚠️ Chỉ quản trị viên nhóm và Admin bot mới có thể sử dụng bot trong nhóm này.`, event.threadID, event.messageID);
+   }
 
        if (userBanned.has(senderID) || threadBanned.has(threadID) || allowInbox == ![] && senderID == threadID) {
          if(!body.startsWith(PREFIX)) return

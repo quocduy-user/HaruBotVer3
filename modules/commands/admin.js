@@ -35,12 +35,12 @@ const logAdminAction = (action, performer, target = null) => {
 
 module.exports.config = {
     name: "admin",
-    version: "2.0.0",
+    version: "2.2.0",
     hasPermssion: 1,
     credits: "Mirai Team - Modified by Satoru - Upgraded by Cascade",
     description: "Hệ thống quản lý admin nâng cao với thống kê và giám sát",
     commandCategory: "Hệ thống",
-    usages: "admin [list|add|remove|stats|backup|restore|log|help]",
+    usages: "admin [list|add|addndh|remove|removendh|toggle <qtvonly|only|ibrieng>]",
     cooldowns: 2,
     dependencies: {
         "fs-extra": ""
@@ -76,44 +76,50 @@ module.exports.handleReply = async function({ api, event, handleReply, getText, 
     const { threadID, messageID, body } = event;
     const { configPath } = global.client;
     const config = require(configPath);
-    
-    const index = parseInt(body);
-    if (isNaN(index)) return api.sendMessage(getText("invalidIndex"), threadID, messageID);
-    
-    let targetArray, targetIndex, roleText;
-    const adminLength = config.ADMINBOT.length;
-    
-    if (index <= adminLength) {
-        targetArray = config.ADMINBOT;
-        targetIndex = index - 1;
-        roleText = "ADMIN BOT";
-    } else {
-        targetArray = config.NDH;
-        targetIndex = index - adminLength - 1;
-        roleText = "NGƯỜI HỖ TRỢ";
+
+    // Cho phép xóa nhiều bằng cách reply: "1 3 5"
+    const tokens = String(body || '').trim().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return api.sendMessage(getText("invalidIndex"), threadID, messageID);
+
+    const display = handleReply.display || []; // [{id, role}]
+    const removed = [];
+    const failed = [];
+
+    for (const tok of tokens) {
+        const idx = parseInt(tok, 10);
+        if (isNaN(idx) || idx < 1 || idx > display.length) {
+            failed.push(`#${tok}`);
+            continue;
+        }
+        const item = display[idx - 1];
+        const uid = item.id;
+        const roleText = item.role;
+
+        try {
+            const name = global.data.userName.get(uid) || await Users.getNameUser(uid);
+            if (roleText === 'ADMIN BOT') {
+                const i1 = config.ADMINBOT.indexOf(uid);
+                if (i1 !== -1) config.ADMINBOT.splice(i1, 1);
+                const i2 = global.config.ADMINBOT.indexOf(uid);
+                if (i2 !== -1) global.config.ADMINBOT.splice(i2, 1);
+            } else {
+                const i1 = config.NDH.indexOf(uid);
+                if (i1 !== -1) config.NDH.splice(i1, 1);
+                const i2 = global.config.NDH.indexOf(uid);
+                if (i2 !== -1) global.config.NDH.splice(i2, 1);
+            }
+            removed.push(`${uid} - ${name} (${roleText})`);
+        } catch (e) {
+            failed.push(`${uid} (${roleText})`);
+        }
     }
-    
-    if (targetIndex < 0 || targetIndex >= targetArray.length) {
-        return api.sendMessage(getText("invalidIndex"), threadID, messageID);
-    }
-    
-    const removedUID = targetArray[targetIndex];
-    const name = await Users.getNameUser(removedUID);
-    
-    targetArray.splice(targetIndex, 1);
-    if (roleText === "ADMIN BOT") {
-        global.config.ADMINBOT.splice(global.config.ADMINBOT.indexOf(removedUID), 1);
-    } else {
-        global.config.NDH.splice(global.config.NDH.indexOf(removedUID), 1);
-    }
-    
+
     writeFileSync(configPath, JSON.stringify(config, null, 4), 'utf8');
-    
-    return api.sendMessage(
-        getText("removedByIndex", roleText, `${removedUID} - ${name}`),
-        threadID,
-        messageID
-    );
+
+    const lines = [];
+    if (removed.length) lines.push(`✅ Đã gỡ: ${removed.length}\n• ` + removed.join('\n• '));
+    if (failed.length) lines.push(`❎ Lỗi/không hợp lệ: ${failed.length}\n• ` + failed.join('\n• '));
+    return api.sendMessage(lines.join('\n\n') || getText("invalidIndex"), threadID, messageID);
 };
 
 module.exports.run = async function({ api, event, args, Users, permssion, getText }) {
@@ -123,24 +129,16 @@ module.exports.run = async function({ api, event, args, Users, permssion, getTex
     const mention = Object.keys(mentions);
     
     if (!args[0] || args[0] === "help") {
-        const stats = getSystemStats();
         return api.sendMessage(
-            `🔧 **ADMIN PANEL 2.0** 🔧\n` +
-            `⏱️ Uptime: ${stats.uptime} | 💾 RAM: ${stats.memory}\n` +
-            `👥 ${stats.threads} nhóm | 👤 ${stats.users} người dùng\n\n` +
-            `📋 **QUẢN LÝ ADMIN:**\n` +
-            `• \`admin list\` - Danh sách admin/NDH\n` +
-            `• \`admin add\` - Thêm admin\n` +
-            `• \`admin addndh\` - Thêm người hỗ trợ\n` +
-            `• \`admin remove/removendh\` - Gỡ quyền\n\n` +
-            `⚙️ **CẤU HÌNH:**\n` +
-            `• \`admin qtvonly\` - Chế độ QTV only\n` +
-            `• \`admin only\` - Chế độ Admin only\n` +
-            `• \`admin ibrieng\` - Chat riêng\n\n` +
-            `📊 **THỐNG KÊ & GIÁM SÁT:**\n` +
-            `• \`admin stats\` - Thống kê hệ thống\n` +
-            `• \`admin log\` - Lịch sử hoạt động\n` +
-            `• \`admin backup\` - Sao lưu cấu hình`,
+            `🔧 ADMIN PANEL (Gọn nhẹ)\n\n` +
+            `📋 QUẢN LÝ QUYỀN:\n` +
+            `• admin list [page]\n` +
+            `• admin add <@tag|reply|uid>\n` +
+            `• admin addndh <@tag|reply|uid>\n` +
+            `• admin remove <@tag|reply|uid>\n` +
+            `• admin removendh <@tag|reply|uid>\n\n` +
+            `⚙️ CẤU HÌNH NHÓM:\n` +
+            `• admin toggle <qtvonly|only|ibrieng>`,
             threadID, messageID
         );
     }
@@ -200,28 +198,35 @@ module.exports.run = async function({ api, event, args, Users, permssion, getTex
     switch (args[0]) {
         case "list": {
             if (permssion < 2) return api.sendMessage(getText("notHavePermssion", "list"), threadID, messageID);
-            
-            let adminList = [], ndhList = [];
-            let count = 1;
-            
-            for (const id of config.ADMINBOT) {
-                const name = global.data.userName.get(id) || await Users.getNameUser(id);
-                adminList.push(`${count++}. ${name}\n→ ID: ${id}`);
-            }
-            
-            for (const id of config.NDH) {
-                const name = global.data.userName.get(id) || await Users.getNameUser(id);
-                ndhList.push(`${count++}. ${name}\n→ ID: ${id}`);
+            // Hỗ trợ phân trang: admin list [page]
+            const pageSize = 10;
+            const reqPage = Math.max(1, parseInt(args[1] || '1', 10) || 1);
+            const all = [
+                ...config.ADMINBOT.map(id => ({ id, role: 'ADMIN BOT' })),
+                ...config.NDH.map(id => ({ id, role: 'NGƯỜI HỖ TRỢ' }))
+            ];
+            const totalPages = Math.max(1, Math.ceil(all.length / pageSize));
+            const page = Math.min(reqPage, totalPages);
+            const slice = all.slice((page - 1) * pageSize, page * pageSize);
+
+            let count = (page - 1) * pageSize + 1;
+            const lines = [];
+            for (const item of slice) {
+                const name = global.data.userName.get(item.id) || await Users.getNameUser(item.id);
+                lines.push(`${count++}. ${name}\n→ ID: ${item.id}\n→ Vai trò: ${item.role}`);
             }
 
+            const header = `=== [ DANH SÁCH ADMIN & NDH ] ===\nTrang ${page}/${totalPages}`;
+
             return api.sendMessage(
-                getText("listAdmin", adminList.join("\n\n"), ndhList.join("\n\n")),
+                `${header}\n\n${lines.join('\n\n')}\n\nReply số thứ tự (có thể nhiều số, cách nhau khoảng trắng) để gỡ quyền.`,
                 threadID,
                 (error, info) => {
                     global.client.handleReply.push({
                         name: this.config.name,
                         messageID: info.messageID,
-                        author: senderID
+                        author: senderID,
+                        display: slice // lưu mapping trang đang hiển thị
                     });
                 },
                 messageID
@@ -240,70 +245,11 @@ module.exports.run = async function({ api, event, args, Users, permssion, getTex
             break;
         }
 
-        case "stats": {
-            if (permssion < 2) return api.sendMessage(getText("notHavePermssion", "stats"), threadID, messageID);
-            const stats = getSystemStats();
-            const pathData = resolve(__dirname, 'data', 'dataAdbox.json');
-            const database = existsSync(pathData) ? require(pathData) : {};
-            
-            const adminOnlyCount = Object.keys(database.only || {}).filter(id => database.only[id]).length;
-            const qtvOnlyCount = Object.keys(database.adminbox || {}).filter(id => database.adminbox[id]).length;
-            
-            return api.sendMessage(
-                `📊 **THỐNG KÊ HỆ THỐNG** 📊\n\n` +
-                `🤖 **Bot Status:**\n` +
-                `⏱️ Uptime: ${stats.uptime}\n` +
-                `💾 RAM: ${stats.memory}\n` +
-                `👥 Nhóm: ${stats.threads}\n` +
-                `👤 Người dùng: ${stats.users}\n\n` +
-                `👨‍💻 **Admin:**\n` +
-                `🔧 Admin Bot: ${config.ADMINBOT.length}\n` +
-                `🛠️ Người hỗ trợ: ${config.NDH.length}\n\n` +
-                `⚙️ **Cấu hình nhóm:**\n` +
-                `🔒 Admin Only: ${adminOnlyCount} nhóm\n` +
-                `👮 QTV Only: ${qtvOnlyCount} nhóm`,
-                threadID, messageID
-            );
-        }
+        
 
-        case "log": {
-            if (permssion < 2) return api.sendMessage(getText("notHavePermssion", "log"), threadID, messageID);
-            const logPath = resolve(__dirname, 'data', 'adminLog.txt');
-            
-            if (!existsSync(logPath)) {
-                return api.sendMessage("📝 Chưa có lịch sử hoạt động nào!", threadID, messageID);
-            }
-            
-            const logs = readFileSync(logPath, 'utf8').split('\n').slice(0, 10);
-            return api.sendMessage(
-                `📝 **LỊCH SỬ HOẠT ĐỘNG** (10 gần nhất)\n\n${logs.join('\n')}`,
-                threadID, messageID
-            );
-        }
+        
 
-        case "backup": {
-            if (permssion !== 3) return api.sendMessage(getText("notHavePermssion", "backup"), threadID, messageID);
-            const backupData = {
-                timestamp: new Date().toISOString(),
-                config: {
-                    ADMINBOT: config.ADMINBOT,
-                    NDH: config.NDH
-                }
-            };
-            
-            const backupPath = resolve(__dirname, 'data', `backup_${Date.now()}.json`);
-            writeFileSync(backupPath, JSON.stringify(backupData, null, 4));
-            logAdminAction("tạo backup", await Users.getNameUser(senderID));
-            
-            return api.sendMessage(
-                `💾 **BACKUP THÀNH CÔNG**\n\n` +
-                `📁 File: backup_${Date.now()}.json\n` +
-                `📊 Admin: ${config.ADMINBOT.length}\n` +
-                `📊 NDH: ${config.NDH.length}\n` +
-                `⏰ Thời gian: ${new Date().toLocaleString('vi-VN')}`,
-                threadID, messageID
-            );
-        }
+        
 
         case "addndh": {
             if (permssion !== 3) return api.sendMessage(getText("notHavePermssion", "addndh"), threadID, messageID);
@@ -341,52 +287,33 @@ module.exports.run = async function({ api, event, args, Users, permssion, getTex
             break;
         }
 
-        case "qtvonly": {
+        case "toggle": {
             const pathData = resolve(__dirname, 'data', 'dataAdbox.json');
             const database = require(pathData);
-            if (permssion < 1) return api.sendMessage("[ ADMIN ] → Cần quyền Quản trị viên trở lên", threadID, messageID);
-            
-            database.adminbox[threadID] = !database.adminbox[threadID];
-            writeFileSync(pathData, JSON.stringify(database, null, 4));
-            
-            return api.sendMessage(
-                `[ ADMIN ] → ${database.adminbox[threadID] ? 
-                    "Bật chế độ QTV Only thành công" : 
-                    "Tắt chế độ QTV Only thành công"}`,
-                threadID, messageID
-            );
-        }
+            const sub = (args[1] || '').toLowerCase();
+            if (!['qtvonly','only','ibrieng'].includes(sub)) {
+                return api.sendMessage('⚠️ Dùng: admin toggle <qtvonly|only|ibrieng>', threadID, messageID);
+            }
+            if (sub === 'qtvonly' && permssion < 1) return api.sendMessage('[ ADMIN ] → Cần quyền QTV', threadID, messageID);
+            if (sub === 'only' && permssion < 2) return api.sendMessage('[ ADMIN ] → Cần quyền ADMIN', threadID, messageID);
+            if (sub === 'ibrieng' && permssion !== 3) return api.sendMessage('[ ADMIN ] → Cần quyền ADMIN', threadID, messageID);
 
-        case "only": {
-            const pathData = resolve(__dirname, 'data', 'dataAdbox.json');
-            const database = require(pathData);
-            if (permssion < 2) return api.sendMessage("[ ADMIN ] → Cần quyền ADMIN trở lên", threadID, messageID);
-            
-            database.only[threadID] = !database.only[threadID];
-            writeFileSync(pathData, JSON.stringify(database, null, 4));
-            
-            return api.sendMessage(
-                `[ ADMIN ] → ${database.only[threadID] ? 
-                    "Bật chế độ Admin Only thành công" : 
-                    "Tắt chế độ Admin Only thành công"}`,
-                threadID, messageID
-            );
-        }
-
-        case "ibrieng": {
-            const pathData = resolve(__dirname, 'data', 'dataAdbox.json');
-            const database = require(pathData);
-            if (permssion !== 3) return api.sendMessage("[ ADMIN ] → Cần quyền ADMIN để thực hiện", threadID, messageID);
-            
-            database.privateChat[threadID] = !database.privateChat[threadID];
-            writeFileSync(pathData, JSON.stringify(database, null, 4));
-            
-            return api.sendMessage(
-                `[ ADMIN ] → ${database.privateChat[threadID] ? 
-                    "Bật chế độ chat riêng thành công" : 
-                    "Tắt chế độ chat riêng thành công"}`,
-                threadID, messageID
-            );
+            if (sub === 'qtvonly') {
+                database.adminbox[threadID] = !database.adminbox[threadID];
+                writeFileSync(pathData, JSON.stringify(database, null, 4));
+                return api.sendMessage(`[ ADMIN ] → ${database.adminbox[threadID] ? 'Bật' : 'Tắt'} chế độ QTV Only thành công`, threadID, messageID);
+            }
+            if (sub === 'only') {
+                database.only[threadID] = !database.only[threadID];
+                writeFileSync(pathData, JSON.stringify(database, null, 4));
+                return api.sendMessage(`[ ADMIN ] → ${database.only[threadID] ? 'Bật' : 'Tắt'} chế độ Admin Only thành công`, threadID, messageID);
+            }
+            if (sub === 'ibrieng') {
+                database.privateChat[threadID] = !database.privateChat[threadID];
+                writeFileSync(pathData, JSON.stringify(database, null, 4));
+                return api.sendMessage(`[ ADMIN ] → ${database.privateChat[threadID] ? 'Bật' : 'Tắt'} chế độ chat riêng thành công`, threadID, messageID);
+            }
+            break;
         }
 
         default: {

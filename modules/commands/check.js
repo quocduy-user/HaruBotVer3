@@ -16,36 +16,12 @@ this.config = {
 const path = __dirname + '/kiemtra/';
 const moment = require('moment-timezone');
 
-// Khởi tạo thư mục lưu trữ dữ liệu
+// Khởi tạo thư mục lưu trữ dữ liệu (loại bỏ vòng lặp nền để giảm I/O)
 this.onLoad = () => {
   const fs = require('fs');
   if (!fs.existsSync(path) || !fs.statSync(path).isDirectory()) {
     fs.mkdirSync(path, { recursive: true });
   }
-  
-  // Cập nhật thời gian mỗi phút
-  setInterval(() => {
-    const today = moment.tz("Asia/Ho_Chi_Minh").day();
-    const checkttData = fs.readdirSync(path);
-    
-    checkttData.forEach(file => {
-      try { 
-        var fileData = JSON.parse(fs.readFileSync(path + file)) 
-      } catch { 
-        return fs.unlinkSync(path + file) 
-      };
-      
-      if (fileData.time != today) {
-        setTimeout(() => {
-          fileData = JSON.parse(fs.readFileSync(path + file));
-          if (fileData.time != today) {
-            fileData.time = today;
-            fs.writeFileSync(path + file, JSON.stringify(fileData, null, 4));
-          }
-        }, 60 * 1000);
-      }
-    });
-  }, 60 * 1000);
 }
 
 // Xử lý sự kiện tin nhắn để đếm tương tác
@@ -53,17 +29,21 @@ this.handleEvent = async function({ api, event, Threads }) {
   try {
     if (!event.isGroup) return;
     if (global.client.sending_top == true) return;
-    
-    const fs = require('fs'); // Directly require fs instead of using global.nodemodule
-    const { threadID, senderID } = event;
+
+    const fs = require('fs');
+    const { threadID, senderID, participantIDs } = event;
     const today = moment.tz("Asia/Ho_Chi_Minh").day();
     const dayKeyNow = moment.tz("Asia/Ho_Chi_Minh").format("YYYY-MM-DD");
     const weekNow = moment.tz("Asia/Ho_Chi_Minh").isoWeek();
     const weekYearNow = moment.tz("Asia/Ho_Chi_Minh").isoWeekYear();
-    
-    // Tạo file dữ liệu mới nếu chưa tồn tại
-    if (!fs.existsSync(path + threadID + '.json')) {
-      var newObj = {
+
+    const filePath = path + threadID + '.json';
+    let data = null;
+    if (fs.existsSync(filePath)) {
+      try { data = JSON.parse(fs.readFileSync(filePath)); } catch { data = null; }
+    }
+    if (!data) {
+      data = {
         total: [],
         week: [],
         day: [],
@@ -71,111 +51,74 @@ this.handleEvent = async function({ api, event, Threads }) {
         dayKey: dayKeyNow,
         weekNumber: weekNow,
         weekYear: weekYearNow,
-        last: {
-          time: today,
-          day: [],
-          week: [],
-        },
+        last: { time: today, day: [], week: [] },
         lastInteraction: {}
       };
-      fs.writeFileSync(path + threadID + '.json', JSON.stringify(newObj, null, 4));
-    } else {
-      var newObj = JSON.parse(fs.readFileSync(path + threadID + '.json'));
     }
-    
-    // Đảm bảo các trường cần thiết tồn tại
-    newObj.total = Array.isArray(newObj.total) ? newObj.total : [];
-    newObj.week = Array.isArray(newObj.week) ? newObj.week : [];
-    newObj.day = Array.isArray(newObj.day) ? newObj.day : [];
-    if (!newObj.last) newObj.last = { time: today, day: [], week: [] };
-    if (!newObj.dayKey) newObj.dayKey = dayKeyNow;
-    if (typeof newObj.weekNumber !== 'number') newObj.weekNumber = weekNow;
-    if (typeof newObj.weekYear !== 'number') newObj.weekYear = weekYearNow;
+
+    // Đảm bảo cấu trúc
+    if (!Array.isArray(data.total)) data.total = [];
+    if (!Array.isArray(data.week)) data.week = [];
+    if (!Array.isArray(data.day)) data.day = [];
+    if (!data.last) data.last = { time: today, day: [], week: [] };
+    if (!data.dayKey) data.dayKey = dayKeyNow;
+    if (typeof data.weekNumber !== 'number') data.weekNumber = weekNow;
+    if (typeof data.weekYear !== 'number') data.weekYear = weekYearNow;
 
     // Reset NGÀY khi đổi ngày
-    if (newObj.dayKey !== dayKeyNow) {
-      newObj.day.forEach(u => u.count = 0);
-      newObj.last.day = JSON.parse(JSON.stringify(newObj.day));
-      newObj.dayKey = dayKeyNow;
+    if (data.dayKey !== dayKeyNow) {
+      data.last.day = JSON.parse(JSON.stringify(data.day));
+      data.day.forEach(u => u.count = 0);
+      data.dayKey = dayKeyNow;
+      data.time = today;
     }
 
-    // Reset TUẦN khi đổi tuần (ISO week + year)
-    if (newObj.weekNumber !== weekNow || newObj.weekYear !== weekYearNow) {
-      newObj.week.forEach(u => u.count = 0);
-      newObj.last.week = JSON.parse(JSON.stringify(newObj.week));
-      newObj.weekNumber = weekNow;
-      newObj.weekYear = weekYearNow;
+    // Reset TUẦN khi đổi tuần
+    if (data.weekNumber !== weekNow || data.weekYear !== weekYearNow) {
+      data.last.week = JSON.parse(JSON.stringify(data.week));
+      data.week.forEach(u => u.count = 0);
+      data.weekNumber = weekNow;
+      data.weekYear = weekYearNow;
     }
 
     // Cập nhật danh sách thành viên
-    const UserIDs = event.participantIDs || [];
-    if (UserIDs.length != 0) {
-      for (let user of UserIDs) {
-        if (!newObj.last) {
-          newObj.last = {
-            time: today,
-            day: [],
-            week: [],
-          };
-        }
-        
-        // Khởi tạo dữ liệu cho thành viên mới
+    const members = Array.isArray(participantIDs) ? participantIDs : [];
+    if (members.length) {
+      for (const user of members) {
         ['week', 'day'].forEach(timeType => {
-          if (!newObj.last[timeType].find(item => item.id == user)) {
-            newObj.last[timeType].push({
-              id: user,
-              count: 0
-            });
+          if (!data.last[timeType].some(item => item.id == user)) {
+            data.last[timeType].push({ id: user, count: 0 });
           }
         });
-        
         ['total', 'week', 'day'].forEach(timeType => {
-          if (!newObj[timeType].find(item => item.id == user)) {
-            newObj[timeType].push({
-              id: user,
-              count: 0
-            });
+          if (!data[timeType].some(item => item.id == user)) {
+            data[timeType].push({ id: user, count: 0 });
           }
         });
       }
     }
-    
-    fs.writeFileSync(path + threadID + '.json', JSON.stringify(newObj, null, 4));  
-    const threadData = JSON.parse(fs.readFileSync(path + threadID + '.json'));
-    
-    // Xử lý khi ngày thay đổi
-    if (threadData.time != today) {
-      global.client.sending_top = true;
-      setTimeout(() => global.client.sending_top = false, 5 * 60 * 1000);
-    }
-    
-    // Cập nhật số tin nhắn
+
+    // Cập nhật số tin nhắn người gửi
     ['total', 'week', 'day'].forEach(timeType => {
-      const index = threadData[timeType].findIndex(e => e.id == senderID);
-      if (index == -1) {
-        threadData[timeType].push({
-          id: senderID,
-          count: 1
-        });
-      } else {
-        threadData[timeType][index].count++;
-      }
+      const idx = data[timeType].findIndex(e => e.id == senderID);
+      if (idx === -1) data[timeType].push({ id: senderID, count: 1 });
+      else data[timeType][idx].count++;
     });
-    
-    // Lọc thành viên đã rời nhóm
-    let p = event.participantIDs;
-    if (!!p && p.length > 0) {
-      p = p.map($ => $ + '');
-      ['day', 'week', 'total'].forEach(t => 
-        threadData[t] = threadData[t].filter($ => p.includes($.id + ''))
-      );
+
+    // Lọc thành viên đã rời nhóm nếu có danh sách thành viên hiện tại
+    if (members.length) {
+      const set = new Set(members.map($ => String($)));
+      ['day', 'week', 'total'].forEach(t => {
+        data[t] = data[t].filter($ => set.has(String($.id)));
+      });
     }
-  
+
     // Cập nhật thời gian tương tác gần đây
-    threadData.lastInteraction = threadData.lastInteraction || {};
-    threadData.lastInteraction[senderID] = Date.now();
-    
-    fs.writeFileSync(path + threadID + '.json', JSON.stringify(threadData, null, 4));
+    data.lastInteraction = data.lastInteraction || {};
+    data.lastInteraction[senderID] = Date.now();
+
+    // Ghi file duy nhất một lần
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 4));
   } catch(e) {
     console.error("Lỗi trong handleEvent:", e);
   }

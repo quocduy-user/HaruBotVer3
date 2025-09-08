@@ -12,7 +12,7 @@ const ffmpeg = require('fluent-ffmpeg');
 const YouTubeSearchApi = require('youtube-search-api');
 
 
-const API_KEY = process.env.GOOGLE_API_KEY || process.env.GOOGLE_API_KEY_GEMINI || "AIzaSyDrZ2KEzLPtAZB-bgSsh5vyrnLdjc6FCxw";
+const API_KEY = process.env.GOOGLE_API_KEY || process.env.GOOGLE_API_KEY_GEMINI || "AIzaSyBHUTYNwOTqwSSta8fGFcZUHmfRz9q0oLw";
 const MODEL_NAME = "gemini-1.5-flash";
 const generationConfig = {
  temperature: 1,

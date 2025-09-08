@@ -388,5 +388,10 @@
         "key": "haru_e2fb",
         "used": true,
         "duration": 30
+    },
+    {
+        "key": "haru_de1d",
+        "used": false,
+        "duration": 3000
     }
 ]

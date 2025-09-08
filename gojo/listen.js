@@ -8,131 +8,69 @@ module.exports = function ({ api, models }) {
   const path = require("path");
   const moment = require("moment-timezone");
   const axios = require("axios");
+  const cron = require("node-cron");
+  const { isThreadRented } = require("../utils/thuebotCache");
   var day = moment.tz("Asia/Ho_Chi_Minh").day();
   const checkttDataPath = __dirname + "/../modules/commands/_checktt/";
-  setInterval(async () => {
+  // Cron job gửi top tương tác NGÀY vào 00:00 Asia/Ho_Chi_Minh
+  cron.schedule('0 0 * * *', async () => {
     try {
-      const day_now = moment.tz("Asia/Ho_Chi_Minh").day();
-      if (day != day_now) {
-        day = day_now;
-        const checkttData = fs.readdirSync(checkttDataPath);
-        logger("--> CHECKTT: Ngày Mới");
-        checkttData.forEach(async (checkttFile) => {
-          const checktt = JSON.parse(
-            fs.readFileSync(checkttDataPath + checkttFile)
-          );
-
-          if (!checktt.last)
-            checktt.last = {
-              time: day_now,
-              day: [],
-              week: [],
-            };
-
-          let storage = [],
-            count = 1;
-          for (const item of checktt.day) {
-            const userName =
-              (await Users.getNameUser(item.id)) || "Facebook User";
-            const itemToPush = item;
-            itemToPush.name = userName;
-            storage.push(itemToPush);
-          }
-          storage.sort((a, b) => {
-            if (a.count > b.count) {
-              return -1;
-            } else if (a.count < b.count) {
-              return 1;
-            } else {
-              return a.name.localeCompare(b.name);
-            }
-          });
-          let checkttBody = " [ Top 10 Tương Tác Ngày ]\n─────────────────\n";
-          checkttBody += storage
-            .slice(0, 10)
-            .map((item) => {
-              return `${count++}.${
-                item.name
-              } - ${item.count} tin nhắn.`;
-            })
-            .join("\n");
-          api.sendMessage(
-            `${checkttBody}\n─────────────────\n⚡ Các bạn khác cố gắng tương tác nếu muốn lên top nha :3`,
-            checkttFile.replace(".json", ""),
-            (err) => (err ? logger(err) : "")
-          );
-          checktt.last.day = JSON.parse(JSON.stringify(checktt.day));
-          checktt.day.forEach((e) => {
-            e.count = 0;
-          });
-          checktt.time = day_now;
-
-          fs.writeFileSync(
-            checkttDataPath + checkttFile,
-            JSON.stringify(checktt, null, 4)
-          );
-        });
-        if (day_now == 1) {
-          logger("--> CHECKTT: Tuần Mới");
-          checkttData.forEach(async (checkttFile) => {
-            const checktt = JSON.parse(
-              fs.readFileSync(checkttDataPath + checkttFile)
-            );
-
-            if (!checktt.last)
-              checktt.last = {
-                time: day_now,
-                day: [],
-                week: [],
-              };
-
-            let storage = [],
-              count = 1;
-            for (const item of checktt.week) {
-              const userName =
-                (await Users.getNameUser(item.id)) || "Facebook User";
-              const itemToPush = item;
-              itemToPush.name = userName;
-              storage.push(itemToPush);
-            }
-            storage.sort((a, b) => {
-              if (a.count > b.count) {
-                return -1;
-              } else if (a.count < b.count) {
-                return 1;
-              } else {
-                return a.name.localeCompare(b.name);
-              }
-            });
-            let checkttBody = "[ Top 10 Tương Tác Tuần ]\n─────────────────\n";
-            checkttBody += storage
-              .slice(0, 10)
-              .map((item) => {
-                return `${count++}.${
-                  item.name
-                } - ${item.count} tin nhắn.`;
-              })
-              .join("\n");
-            api.sendMessage(
-              `${checkttBody}\n─────────────────\n⚡ Các bạn khác cố gắng tương tác nếu muốn lên top nha :>`,
-              checkttFile.replace(".json", ""),
-              (err) => (err ? logger(err) : "")
-            );
-            checktt.last.week = JSON.parse(JSON.stringify(checktt.week));
-            checktt.week.forEach((e) => {
-              e.count = 0;
-            });
-
-            fs.writeFileSync(
-              checkttDataPath + checkttFile,
-              JSON.stringify(checktt, null, 4)
-            );
-          });
+      const day_now = moment.tz('Asia/Ho_Chi_Minh').day();
+      const checkttData = fs.readdirSync(checkttDataPath);
+      logger("--> CHECKTT: Ngày Mới");
+      for (const checkttFile of checkttData) {
+        const checktt = JSON.parse(fs.readFileSync(checkttDataPath + checkttFile));
+        if (!checktt.last) checktt.last = { time: day_now, day: [], week: [] };
+        let storage = [], count = 1;
+        for (const item of checktt.day) {
+          const userName = (await Users.getNameUser(item.id)) || 'Facebook User';
+          storage.push({ ...item, name: userName });
         }
-        global.client.sending_top = true;
+        storage.sort((a, b) => a.count === b.count ? a.name.localeCompare(b.name) : b.count - a.count);
+        let checkttBody = " [ Top 10 Tương Tác Ngày ]\n─────────────────\n";
+        checkttBody += storage.slice(0, 10).map(item => `${count++}.${item.name} - ${item.count} tin nhắn.`).join('\n');
+        api.sendMessage(
+          `${checkttBody}\n─────────────────\n⚡ Các bạn khác cố gắng tương tác nếu muốn lên top nha :3`,
+          checkttFile.replace('.json', ''),
+          (err) => (err ? logger(err) : '')
+        );
+        checktt.last.day = JSON.parse(JSON.stringify(checktt.day));
+        checktt.day.forEach(e => { e.count = 0; });
+        checktt.time = day_now;
+        fs.writeFileSync(checkttDataPath + checkttFile, JSON.stringify(checktt, null, 4));
+      }
+      global.client.sending_top = true;
+    } catch (e) {}
+  }, { timezone: 'Asia/Ho_Chi_Minh' });
+
+  // Cron job gửi top tương tác TUẦN vào 00:00 thứ Hai (day=1) Asia/Ho_Chi_Minh
+  cron.schedule('0 0 * * 1', async () => {
+    try {
+      const day_now = moment.tz('Asia/Ho_Chi_Minh').day();
+      const checkttData = fs.readdirSync(checkttDataPath);
+      logger("--> CHECKTT: Tuần Mới");
+      for (const checkttFile of checkttData) {
+        const checktt = JSON.parse(fs.readFileSync(checkttDataPath + checkttFile));
+        if (!checktt.last) checktt.last = { time: day_now, day: [], week: [] };
+        let storage = [], count = 1;
+        for (const item of checktt.week) {
+          const userName = (await Users.getNameUser(item.id)) || 'Facebook User';
+          storage.push({ ...item, name: userName });
+        }
+        storage.sort((a, b) => a.count === b.count ? a.name.localeCompare(b.name) : b.count - a.count);
+        let checkttBody = "[ Top 10 Tương Tác Tuần ]\n─────────────────\n";
+        checkttBody += storage.slice(0, 10).map(item => `${count++}.${item.name} - ${item.count} tin nhắn.`).join('\n');
+        api.sendMessage(
+          `${checkttBody}\n─────────────────\n⚡ Các bạn khác cố gắng tương tác nếu muốn lên top nha :>`,
+          checkttFile.replace('.json', ''),
+          (err) => (err ? logger(err) : '')
+        );
+        checktt.last.week = JSON.parse(JSON.stringify(checktt.week));
+        checktt.week.forEach(e => { e.count = 0; });
+        fs.writeFileSync(checkttDataPath + checkttFile, JSON.stringify(checktt, null, 4));
       }
     } catch (e) {}
-  }, 1000 * 10);
+  }, { timezone: 'Asia/Ho_Chi_Minh' });
 
   //////////////////////////////////////////////////////////////////////
   //========= Push all variable from database to environment =========//
@@ -296,30 +234,18 @@ return async (event) => {
       event.senderID != api.getCurrentUserID() &&
       !global.config.ADMINBOT.includes(event.senderID)
     ) {
-      let thuebot;
-      try {
-        thuebot = JSON.parse(
-          require("fs").readFileSync(
-            process.cwd() + "/modules/commands/data/thuebot.json"
-          )
-        );
-      } catch {
-        thuebot = [];
-      }
-      let find_thuebot = thuebot.find(($) => $.t_id == event.threadID);
-
-      if (!find_thuebot)
-            return api.sendMessage(threadID,async () => {
-await api.shareContact("⛔ Nhóm của bạn chưa thuê bot, Vui lòng thuê bot để tiếp tục sử dụng.\n\nLiên hệ Admin: Quoc Duy", 100074278195157, threadID);
-});
-   if (
-        new Date(form_mm_dd_yyyy(find_thuebot.time_end)).getTime() <=
+      const rented = isThreadRented(event.threadID);
+      if (!rented)
+        return api.sendMessage(threadID, async () => {
+          await api.shareContact("⛔ Nhóm của bạn chưa thuê bot, Vui lòng thuê bot để tiếp tục sử dụng.\n\nLiên hệ Admin: Quoc Duy", 100074278195157, threadID);
+        });
+      if (
+        new Date(form_mm_dd_yyyy(rented.time_end)).getTime() <=
         Date.now() + 25200000
       )
-     return api.sendMessage(threadID,async () => {
-await api.shareContact("⚠️ Nhóm của bạn đã hết hạn thuê bot, Vui lòng thanh toán để tiếp tục gia hạn.\n\nLiên hệ Admin: Quoc Duy", 100074278195157, threadID);
-});
-
+        return api.sendMessage(threadID, async () => {
+          await api.shareContact("⚠️ Nhóm của bạn đã hết hạn thuê bot, Vui lòng thanh toán để tiếp tục gia hạn.\n\nLiên hệ Admin: Quoc Duy", 100074278195157, threadID);
+        });
     }
 
 
